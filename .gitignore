@@ -1,0 +1,5 @@
+temp_main.py
+*.uf2
+*.json
+circuitpython
+log.txt

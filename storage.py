@@ -1,0 +1,52 @@
+####################################### Data Management Code ##################################
+import config
+import random
+import ustruct
+import machine
+
+def NameGen(): #Generate unique name for file
+    rng = random.randint(10000,99999)
+    mac = config.mac.replace(":","-")
+    name = f'{config.MicroNum}_{mac}_{rng}' #Make sure these are all lower-case. Some OS's have case sensitive files
+    
+    return name
+
+def CreateBin(data): #Creates binary file of data. First 24 bytes are calibration settings
+    while True:
+        name = NameGen()
+        
+        #creates prepend to data containing accelerometer calibration
+        #first scale with order of XYZ then offset with order of XYZ
+        #ustruct.pack('6f',value) to turn to 4 byte hex, then ustruct.unpack('6f',value) to return to float
+        prepend = bytearray(ustruct.pack('6f',config.ScaleX,config.ScaleY,config.ScaleZ,config.OffsetX,config.OffsetY,config.OffsetZ)) 
+        
+        
+        try:
+            with open(name,'xb') as f:
+                f.write(prepend)
+                f.write(data)
+                print(f'Data logged as {name}')
+                f.close()
+                break
+        except OSError:
+            print("Wow! \nThere was a 1 in 90,000 chance of creating conflicting file names! \nThis is a rare error message!")
+            print("------------------------------------\nAttempting to create new filename...")
+            pass
+        
+    return name        
+     
+def LogError(error_type): #actually implement this!!!
+    Errors = ["Failed to test network connection. Please recheck credentials!\n",
+              "Failed to communicate with accelerometer\n",
+              "Failed to send data to server. Logs will be stored locally until next attempt\n",
+              "Strike was successfully logged and sent!\n"]
+    with open(log.txt,'a') as f:
+        if error_type == -1:
+            f.write(f'Unknown error of type {machine.reset_cause()}/n')
+            print(f'Unknown error of type {machine.reset_cause()}/n')
+            f.close()
+        else:    
+            f.write(Errors[error_type])
+            print(Errors[error_type])
+            f.close()
+    
