@@ -124,7 +124,7 @@ def IntrState(state): #Add functionality to better undo this later!!!!!!!!!!!!!!
 def ResetIntrState():
     reg_read(spi, cs, REG_INT_SOURCE)
     
-def Stream(Samples=1): #Have it check to see if everything is initialized, instead of doing some prior and some in the function!!
+def Stream(Samples=1): #Inefficient data collection, used for testing purposes or calibration
     ReadState(1)
     data = []
     prev = [0,0,0]
