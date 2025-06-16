@@ -4,6 +4,7 @@ import time
 import ustruct
 import config
 import gc
+import storage as stor
 
 #Documentation: https://www.analog.com/media/en/technical-documentation/data-sheets/adxl343.pdf
 #Notes:
@@ -88,7 +89,7 @@ reg_read(spi, cs, REG_DEVID)
 def AccTest():
     data = reg_read(spi, cs, REG_DEVID)
     if (data != bytearray((DEVID,))):
-        print("ERROR: Could not communicate with accelerometer!")
+        stor.ErrorLog(1)
         machine.soft_reset()
 
 
@@ -124,7 +125,7 @@ def IntrState(state): #Add functionality to better undo this later!!!!!!!!!!!!!!
 def ResetIntrState():
     reg_read(spi, cs, REG_INT_SOURCE)
     
-def Stream(Samples=1): #Inefficient data collection, used for testing purposes or calibration
+def Stream(Samples=1): #Have it check to see if everything is initialized, instead of doing some prior and some in the function!!
     ReadState(1)
     data = []
     prev = [0,0,0]

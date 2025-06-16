@@ -6,18 +6,20 @@ import machine
 from picozero import pico_led
 import time
 
-
-acc.ReadState(1)
-acc.IntrState(1)
-acc.ResetIntrState()
+acc.AccTest() #Tests accelerometer can be communicated with
+acc.ReadState(1) #Turns on data reading
+acc.IntrState(1) #Turns on interrupts
+acc.ResetIntrState() #Ensures interrupt condition is reset
 
 def test(pin):
     a = acc.FastStream()
     b = anal.StripData(a)
     name = stor.CreateBin(b)
-    comm.SendData(name, msg="It's working!!!")
+    comm.SendMsg(name, msg="hopefully this works!")
+    comm.SendData(name)
     comm.Disconnect()
-    #acc.ResetIntrState()
+    acc.ResetIntrState()
+    Sleep()
     
 
 def test2(pin):
@@ -28,7 +30,7 @@ def test2(pin):
     Sleep()
 
 
-acc.intr.irq(trigger=machine.Pin.IRQ_RISING,handler=test2)
+acc.intr.irq(trigger=machine.Pin.IRQ_RISING,handler=test)
 
 #while True:
 #    print(f'waiting for falling! Pin = {acc.intr.value()}')

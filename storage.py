@@ -35,18 +35,18 @@ def CreateBin(data): #Creates binary file of data. First 24 bytes are calibratio
         
     return name        
      
-def LogError(error_type): #actually implement this!!!
-    Errors = ["Failed to test network connection. Please recheck credentials!\n",
+def LogError(error_type,msg=""): #actually implement this!!!
+    Errors = ["Failed to connect to network. Please recheck credentials!\n",
               "Failed to communicate with accelerometer\n",
               "Failed to send data to server. Logs will be stored locally until next attempt\n",
-              "Strike was successfully logged and sent!\n"]
-    with open(log.txt,'a') as f:
-        if error_type == -1:
-            f.write(f'Unknown error of type {machine.reset_cause()}/n')
-            print(f'Unknown error of type {machine.reset_cause()}/n')
-            f.close()
-        else:    
+              "Strike was successfully logged and sent!\n",
+              f'Failed to log strike on Google Sheet. See log below:\n{msg}\n']
+    with open(log.txt,'a+') as f:
+        if error_type in range(0,len(Errors)):
             f.write(Errors[error_type])
             print(Errors[error_type])
             f.close()
-    
+        else:    
+            f.write(f'Unknown error of type {machine.reset_cause()}/n')
+            print(f'Unknown error of type {machine.reset_cause()}/n')
+            f.close()

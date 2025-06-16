@@ -13,16 +13,20 @@ ScaleY = config["ScaleY"]
 ScaleZ = config["ScaleZ"]
 PowerMode = config["PowerMode"] #0 for no power saving, 1 for power saving mode
 SendVal = config["SendVal"] #Number of logged strikes before it is uploaded to server
+ComFailVal = config["ComFailVal"] #Number of connection attempts until timeout
+GithubAuth = config["GithubAuth"] #Auth Token for Github
+Repository = config["Repository"]
+GithubAcc = config["GithubAcc"]
 
 #0 for NJIT internet, 1 for home
 mac = config["mac"] #unique number for each device
 ssid = config["ssid"][1]
 password = config["password"][1]
 
-def SaveConfig(Object,Value,Index=-1):
+def SaveConfig(ObjectName,Value,Index=-1):
     if Index == -1:
-        config[Object] = Value
+        config[ObjectName] = Value
     else:
-        config[Object][Index] = Value
+        config[ObjectName][Index] = Value
     with open("config.json","r") as WFile:
         json.dump(config,WFile)
