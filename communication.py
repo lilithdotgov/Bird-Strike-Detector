@@ -7,6 +7,7 @@ import config
 import storage as stor
 import json
 import binascii
+import gc
 
 sta_if = network.WLAN(network.WLAN.IF_STA)
 ap_if = network.WLAN(network.WLAN.IF_AP)
@@ -35,7 +36,7 @@ def Disconnect(): #work on name,  maybe just make same function as connect?
     wlan.disconnect()
     wlan.active(False)
 
-def SendMsg(FileName,msg=""):
+def SendMsg(FileName,msg="test"): #Old code. Should just delete. This was a bad idea from the start
     msg = msg.replace(" ","_")
     Connect()
     
@@ -47,7 +48,7 @@ def SendMsg(FileName,msg=""):
     #col1 has value 0 for UTC, and col2 has value 1 for EST
     DataUrl = f"https://script.google.com/macros/s/{ScriptUrl}?col1='0'&col2='1'&col3='{config.MicroNum}'&col4='{FileName}'&col5='{msg}'"
 
-
+    gc.collect()
     response = requests.get(url=DataUrl)
     if response.text == "Ok":
         print("Collision Event Successfully Logged!")
@@ -55,10 +56,15 @@ def SendMsg(FileName,msg=""):
         stor.LogError(4,response.text)
         
 def SendData(FileName):
+    gc.collect()
     f = open(FileName, "rb")
-    content = f.read()
-    content = binascii.b2a_base64(content, newline=False)
-    content = str(content)[2:-1]
+    contents = f.read()
+    f.close()
+    gc.collect()
+    contents = binascii.b2a_base64(contents, newline=False)
+    gc.collect()
+    content = str(contents)[2:-1]
+    del contents
     
     
     Connect()
@@ -75,11 +81,24 @@ def SendData(FileName):
     repo = config.Repository
     path = FileName #is this how it's done?
 
+    gc.collect()
+    
+    print("please just work! "+str(gc.mem_free()))
+    
     ### BODY PARAMETERS ###
     body = {"message": "New Strike Log", "content": f'{content}'}
+    del content
+    jbody = json.dumps(body)
+    del body
 
-    res = requests.put(f'https://api.github.com/repos/{owner}/{repo}/contents/{path}', headers = head, data = json.dumps(body))
+    gc.collect()
+    res = requests.put(f'https://api.github.com/repos/{owner}/{repo}/contents/{path}', headers = head, data = jbody)
     if FileName in res.text:
         print(f'Successful data transfer to {repo}!')
+        stor.DeleteFile(FileName)
     else:
+        stor.LogError(2,res.text)
         print(res.text)
+    
+    del res
+    gc.collect()

@@ -3,6 +3,8 @@ import config
 import random
 import ustruct
 import machine
+import os
+import gc
 
 def NameGen(): #Generate unique name for file
     rng = random.randint(10000,99999)
@@ -29,24 +31,34 @@ def CreateBin(data): #Creates binary file of data. First 24 bytes are calibratio
                 f.close()
                 break
         except OSError:
-            print("Wow! \nThere was a 1 in 90,000 chance of creating conflicting file names! \nThis is a rare error message!")
-            print("------------------------------------\nAttempting to create new filename...")
+            print("Filename already in use. Attempting to create new filename...")
             pass
-        
-    return name        
+    
+    del prepend
+    del data
+    gc.collect() 
+    return name
      
-def LogError(error_type,msg=""): #actually implement this!!!
+def DeleteFile(FileName):
+    try:
+        os.remove(FileName)
+        print(f'{FileName} deleted successfully')
+    except OSError as err:
+        LogError(4,err)
+        print(err)
+     
+def LogError(error_type,msg=""): #work on this more
     Errors = ["Failed to connect to network. Please recheck credentials!\n",
-              "Failed to communicate with accelerometer\n",
-              "Failed to send data to server. Logs will be stored locally until next attempt\n",
+              "Failed to communicate with accelerometer. Please ensure your cables are connected to the correct pins!\n",
+              "Failed to send data to server. Logs will be stored locally until next attempt. Error message:\n{msg}\n",
               "Strike was successfully logged and sent!\n",
-              f'Failed to log strike on Google Sheet. See log below:\n{msg}\n']
-    with open(log.txt,'a+') as f:
-        if error_type in range(0,len(Errors)):
-            f.write(Errors[error_type])
-            print(Errors[error_type])
-            f.close()
-        else:    
-            f.write(f'Unknown error of type {machine.reset_cause()}/n')
-            print(f'Unknown error of type {machine.reset_cause()}/n')
-            f.close()
+              f'Failed to delete file. Error message:\n{msg}\n']
+    f = open("log.txt","a+")
+    if error_type in range(0,len(Errors)):
+        f.write(Errors[error_type])
+        print(Errors[error_type])
+        f.close()
+    else:    
+        f.write(f'Unknown error of type {machine.reset_cause()}/n')
+        print(f'Unknown error of type {machine.reset_cause()}/n')
+        f.close()

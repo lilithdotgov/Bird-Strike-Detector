@@ -159,7 +159,8 @@ def FastStream(): #Optimized for speed, data needs further handling, used in mai
         
         if i % 64 == 0: #might not be needed, bytearray seems to be very cleverly done when compiled!
             gc.collect()
-        
+    
+    gc.collect()
     return data
     
 def Calibrate():
