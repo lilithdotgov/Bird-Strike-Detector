@@ -156,21 +156,18 @@ def FastStream(): #Optimized for speed, data needs further handling, used in mai
     data = bytearray(buffer_size*bps)
     for i in range(0,buffer_size):
         data[bps*i:bps*i+bps] = reg_read(spi, cs, REG_DATAX0, bps)
-        
+    '''    
         if i % 64 == 0: #might not be needed, bytearray seems to be very cleverly done when compiled!
             gc.collect()
-    
-    gc.collect()
+    '''
     return data
     
 def Calibrate():
     axis = int(input("Choose an axis for calibration: \n X = 0 \n Y = 1 \n Z = 2 \n"))
     input("Please stabilize the device to have the + side face UPWARDS. Press ENTER to continue") #work on wording!!!
     UpperBound = Stream(100)
-    gc.collect()
     input("Please stabilize the device to have the - side face DOWNWARDS. Press ENTER to continue")
     LowerBound = Stream(100)
-    gc.collect()
     AvgT = 0
     AvgB = 0
     N = len(UpperBound)

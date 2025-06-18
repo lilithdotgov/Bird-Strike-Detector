@@ -3,11 +3,13 @@ import network
 import socket
 import urequests as requests
 import time
+import ntptime as ntp
 import config
 import storage as stor
 import json
 import binascii
 import gc
+import machine
 
 sta_if = network.WLAN(network.WLAN.IF_STA)
 ap_if = network.WLAN(network.WLAN.IF_AP)
@@ -32,11 +34,13 @@ def Connect(): #Make new error checker later
     print("Connected!")
 
 
-def Disconnect(): #work on name,  maybe just make same function as connect?
+def Disconnect():
     wlan.disconnect()
     wlan.active(False)
 
-def SendMsg(FileName,msg="test"): #Old code. Should just delete. This was a bad idea from the start
+#Old code. Should just delete. This was a bad idea from the start
+'''
+def SendMsg(FileName,msg="test"):
     msg = msg.replace(" ","_")
     Connect()
     
@@ -53,20 +57,19 @@ def SendMsg(FileName,msg="test"): #Old code. Should just delete. This was a bad 
         print("Collision Event Successfully Logged!")
     else:
         stor.LogError(4,response.text)
-        
+'''      
 def SendData(FileName):
     f = open(FileName, "rb")
     content = f.read()
     f.close()
     content = binascii.b2a_base64(content, newline=False)
     
+    ### BODY PARAMETERS ###
     contents = bytearray(len(content)+41) #look at precomputing this in the future
     contents[:39] = b'{"message":"New Strike Log","content":"' #len() = 39
     contents[-2:] = b'"}' #len() = 2
     contents[39:-2] = content
     del content
-    
-    Connect()
 
     ### HEADERS ###
     head = {
@@ -75,28 +78,21 @@ def SendData(FileName):
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": f'{config.GithubAcc}'}
 
+    Connect()
+    UTC = ntp.time()
+
     ### PATH PARAMETERS ###
     owner = config.GithubAcc
     repo = config.Repository
-    path = FileName #is this how it's done?
-
-
+    path = f'{FileName[:-5]}{UTC}' #is this how it's done?
     
     print("please just work! "+str(gc.mem_free()))
     
-    ### BODY PARAMETERS ###
-    '''
-    body = {"message": "New Strike Log", "content": f'{content}'}
-    del content
-    jbody = json.dumps(body)
-    del body
-    '''
 
     gc.collect() #requests is bad, this is needed because C is the bad language.
     res = requests.put(f'https://api.github.com/repos/{owner}/{repo}/contents/{path}', headers = head, data = contents)
-    if FileName in res.text:
+    if path in res.text:
         print(f'Successful data transfer to {repo}!')
         stor.DeleteFile(FileName)
     else:
         stor.LogError(2,res.text)
-        print(res.text)

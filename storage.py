@@ -4,7 +4,6 @@ import random
 import ustruct
 import machine
 import os
-import gc
 
 def NameGen(): #Generate unique name for file
     rng = random.randint(10000,99999)
@@ -33,10 +32,7 @@ def CreateBin(data): #Creates binary file of data. First 24 bytes are calibratio
         except OSError:
             print("Filename already in use. Attempting to create new filename...")
             pass
-    
-    del prepend
-    del data
-    gc.collect() 
+     
     return name
      
 def DeleteFile(FileName):
@@ -50,7 +46,7 @@ def DeleteFile(FileName):
 def LogError(error_type,msg=""): #work on this more
     Errors = ["Failed to connect to network. Please recheck credentials!\n",
               "Failed to communicate with accelerometer. Please ensure your cables are connected to the correct pins!\n",
-              "Failed to send data to server. Logs will be stored locally until next attempt. Error message:\n{msg}\n",
+              f'Failed to send data to server. Logs will be stored locally until next attempt. Error message:\n{msg}\n',
               "Strike was successfully logged and sent!\n",
               f'Failed to delete file. Error message:\n{msg}\n']
     f = open("log.txt","a+")
