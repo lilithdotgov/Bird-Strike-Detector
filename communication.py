@@ -48,7 +48,6 @@ def SendMsg(FileName,msg="test"): #Old code. Should just delete. This was a bad 
     #col1 has value 0 for UTC, and col2 has value 1 for EST
     DataUrl = f"https://script.google.com/macros/s/{ScriptUrl}?col1='0'&col2='1'&col3='{config.MicroNum}'&col4='{FileName}'&col5='{msg}'"
 
-    gc.collect()
     response = requests.get(url=DataUrl)
     if response.text == "Ok":
         print("Collision Event Successfully Logged!")
@@ -56,16 +55,16 @@ def SendMsg(FileName,msg="test"): #Old code. Should just delete. This was a bad 
         stor.LogError(4,response.text)
         
 def SendData(FileName):
-    gc.collect()
     f = open(FileName, "rb")
-    contents = f.read()
+    content = f.read()
     f.close()
-    gc.collect()
-    contents = binascii.b2a_base64(contents, newline=False)
-    gc.collect()
-    content = str(contents)[2:-1]
-    del contents
+    content = binascii.b2a_base64(content, newline=False)
     
+    contents = bytearray(len(content)+41) #look at precomputing this in the future
+    contents[:39] = b'{"message":"New Strike Log","content":"' #len() = 39
+    contents[-2:] = b'"}' #len() = 2
+    contents[39:-2] = content
+    del content
     
     Connect()
 
@@ -81,24 +80,23 @@ def SendData(FileName):
     repo = config.Repository
     path = FileName #is this how it's done?
 
-    gc.collect()
+
     
     print("please just work! "+str(gc.mem_free()))
     
     ### BODY PARAMETERS ###
+    '''
     body = {"message": "New Strike Log", "content": f'{content}'}
     del content
     jbody = json.dumps(body)
     del body
+    '''
 
-    gc.collect()
-    res = requests.put(f'https://api.github.com/repos/{owner}/{repo}/contents/{path}', headers = head, data = jbody)
+    gc.collect() #requests is bad, this is needed because C is the bad language.
+    res = requests.put(f'https://api.github.com/repos/{owner}/{repo}/contents/{path}', headers = head, data = contents)
     if FileName in res.text:
         print(f'Successful data transfer to {repo}!')
         stor.DeleteFile(FileName)
     else:
         stor.LogError(2,res.text)
         print(res.text)
-    
-    del res
-    gc.collect()

@@ -36,7 +36,7 @@ def test(pin):
     comm.SendData(name)
     del name
     
-    print("mem after SendData "+str(gc.mem_free()))
+    print("mem after SendData "+str(gc.mem_free())+"\n")
     
     comm.Disconnect()
     acc.ResetIntrState()

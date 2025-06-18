@@ -3,7 +3,6 @@ import gc
 
 #function removes repeats of data caused by reading data registers faster than they are updated
 def StripData(data,bps=6): #bps = bytes per sample
-    gc.collect()
     prev = b'0x00'
     new_data = bytearray(0)
     
@@ -18,7 +17,6 @@ def StripData(data,bps=6): #bps = bytes per sample
     
     del prev
     del data
-    gc.collect()
     return new_data[0:bps*1024]
 
 
