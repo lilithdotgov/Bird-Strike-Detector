@@ -20,8 +20,8 @@ GithubAcc = config["GithubAcc"]
 
 #0 for NJIT internet, 1 for home
 mac = config["mac"] #unique number for each device
-ssid = config["ssid"][1]
-password = config["password"][1]
+ssid = config["ssid"][0]
+password = config["password"][0]
 
 def SaveConfig(ObjectName,Value,Index=-1):
     if Index == -1:
