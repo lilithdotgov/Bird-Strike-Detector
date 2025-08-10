@@ -29,7 +29,6 @@ def Connect(): #Make new error checker later
         
         if failures > config.ComFailVal:
             stor.LogError(0)
-            machine.soft_reset()
        
     print("Connected!")
 
@@ -38,37 +37,17 @@ def Disconnect():
     wlan.disconnect()
     wlan.active(False)
 
-#Old code. Should just delete. This was a bad idea from the start
-'''
-def SendMsg(FileName,msg="test"):
-    msg = msg.replace(" ","_")
-    Connect()
-    
-    print("Sending Message to Google Sheet...")
-    
-    #UPDATE THE GOOGLE SCRIPT! ONLY CARE ABOUT EVENTS! DATA CAN BE OBTAINED THRU SERVER!
-    ScriptUrl = "AKfycbwbSY9-Rd6My8EsZ7U6ndwwt3rg3tyRseBj6zZC5X0KTcqDoJuYxTXuhJg24DROzZX34A/exec"
-    
-    #col1 has value 0 for UTC, and col2 has value 1 for EST
-    DataUrl = f"https://script.google.com/macros/s/{ScriptUrl}?col1='0'&col2='1'&col3='{config.MicroNum}'&col4='{FileName}'&col5='{msg}'"
-
-    response = requests.get(url=DataUrl)
-    if response.text == "Ok":
-        print("Collision Event Successfully Logged!")
-    else:
-        stor.LogError(4,response.text)
-'''      
-def SendData(FileName):
+def SendData(FileName,gettime=True):
     f = open(FileName, "rb")
     content = f.read()
     f.close()
     content = binascii.b2a_base64(content, newline=False)
     
     ### BODY PARAMETERS ###
-    contents = bytearray(len(content)+41) #look at precomputing this in the future
-    contents[:39] = b'{"message":"New Strike Log","content":"' #len() = 39
+    contents = bytearray(len(content)+100) #look at precomputing this in the future
+    contents[:98] = b'{"message":"New Strike Log","committer":{"name":"no1","email":"odysseus@fakemail.com"},"content":"' #len() = 98
     contents[-2:] = b'"}' #len() = 2
-    contents[39:-2] = content
+    contents[98:-2] = content
     del content
 
     ### HEADERS ###
@@ -76,23 +55,43 @@ def SendData(FileName):
         "Accept": "application/vnd.github+json",
         "Authorization": f'Bearer {config.GithubAuth}',
         "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": f'{config.GithubAcc}'}
+        "User-Agent": f'{config.GithubAcc}'}#,
+        #"Connection": "close"}
 
     Connect()
-    UTC = ntp.time()
+    if gettime == True:
+        for i in range(0,config.SendVal): #make while loop, for is messy here
+            try:
+                UTC = ntp.time()
+                tm = time.gmtime(UTC)
+                machine.RTC().datetime((tm[0], tm[1], tm[2], tm[6] + 1, tm[3], tm[4], tm[5], 0))
+            except OSError:
+                if i == config.SendVal - 1:
+                    stor.LogError(2,"Failed to get datetime")
+                time.sleep(3)    
+            else:
+                stor.RenameFile(FileName,f'{FileName[:-9]}{UTC}.bin')
+                break
 
     ### PATH PARAMETERS ###
     owner = config.GithubAcc
     repo = config.Repository
-    path = f'{FileName[:-5]}{UTC}' #is this how it's done?
+    if gettime == True:
+        path = f'{FileName[:-9]}{UTC}.bin'
+    else:
+        path = FileName
     
-    print("please just work! "+str(gc.mem_free()))
+    try:
+        print("attempting to send "+str(gc.mem_free()))
+        gc.collect() #requests is bad, this is needed because C cannot be trusted
+        res = requests.put(f'https://api.github.com/repos/{owner}/{repo}/contents/{path}', headers = head, data = contents)
+        if path in res.text:
+            print(f'Successful data transfer to {repo}!')
+            stor.DeleteFile(path)
+            #break
+        else:
+            stor.LogError(2,res.text)
+    except Exception as exc:
+        stor.LogError(2,exc)
     
 
-    gc.collect() #requests is bad, this is needed because C is the bad language.
-    res = requests.put(f'https://api.github.com/repos/{owner}/{repo}/contents/{path}', headers = head, data = contents)
-    if path in res.text:
-        print(f'Successful data transfer to {repo}!')
-        stor.DeleteFile(FileName)
-    else:
-        stor.LogError(2,res.text)

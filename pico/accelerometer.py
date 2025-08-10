@@ -11,7 +11,6 @@ import storage as stor
 #To read data first bit W should be 1, to write it should be 0
 #To read/write multiple bytes in one call second bit MB is set to 1, else 0 for a single byte
 #Chip Select (CS) needs to be set to 0 whenever doing read/write, and set to 1 afterwards
-
 REG_DEVID = 0x00 #Used to test that we are reading from correct spot. Check doc pg. 23
 DEVID = 0xE5 #Should recieve this default value when reading the Device ID Register (REG_DEVID)
 REG_POWER_CTL = 0x2D #Power Control Register, used to enable/disable data output
@@ -21,14 +20,16 @@ REG_DATAX0 = 0x32 #0x32 to 0x37 contain the data for each axis, each is 2 bytes.
 REG_INT_ENABLE = 0x2E #Interrupt Enable Register
 INT_ENABLE = 0x10 #Enables Activity mode
 REG_ACT_CTL = 0x27 #Enables which axis to be monitored for the interrupt modes. Plus an unused bonus feature, see doc pg. 23
-ACT_CTL = 0x10 #Sets just the z axis on for now. TODO: Change to least noisy axis in production
+ACT_CTL = 0x10 #Selects which axis to turn on for the interrupt. See doc pg. 23
 REG_INT_MAP = 0x2F #Chooses which pin(s) to use for interrupts
 INT_MAP = 0xEF #Sets activity mode interrupt to pin INT1
 REG_THRESH_ACT = 0x24 #Sets threshold for interrupt to occur. Single unsigned byte. threshold = 62.5mg * THRESH_ACT.
-THRESH_ACT = 0x16 #0x20 = 32, 32 * 62.5mg = 2g 
+THRESH_ACT = 0x08 #0x20 = 32, 32 * 62.5mg = 2g 
 REG_FIFO_MODE = 0x38 #Register controlling FIFO modes
 FIFO_MODE = 0x80 #Sets FIFO mode to stream
-REG_INT_SOURCE = 0x30 #Read-only register, shows which interrupts were activated. Reading this resets the interrupt states 
+REG_INT_SOURCE = 0x30 #Read-only register, shows which interrupts were activated. Reading this resets the interrupt states
+REG_DATA_FORMAT = 0x31 #Used for formatting data, see pg. 26
+DATA_FORMAT = 0b00000010 #Importantly sets the data range, has other functionalities that are unused
 G = 9.80665     
 
 ##################### TODO: CHANGE PIN INTERRUPT TO DEFAULT TO LOW CURRENT AND HAVE HIGH CURRENT BE INTERRUPT EVENT
@@ -101,7 +102,8 @@ def ReadState(state):
  
     
     elif state == 1:
-        reg_write(spi, cs, REG_RATE, RATE) #Sets Data Output Rate 
+        reg_write(spi, cs, REG_RATE, RATE) #Sets Data Output Rate
+        reg_write(spi, cs, REG_DATA_FORMAT, DATA_FORMAT) #Sets Data Format
         PowerControl = reg_read(spi, cs, REG_POWER_CTL) #Obtain current Power Control setting
         PowerControl = int.from_bytes(PowerControl, "big") | (0x01 << 3) #Change Power Control Measure bit to 1 to begin data collecition, see pg. 
         reg_write(spi, cs, REG_POWER_CTL, PowerControl) #Write change
@@ -125,7 +127,7 @@ def IntrState(state): #Add functionality to better undo this later!!!!!!!!!!!!!!
 def ResetIntrState():
     reg_read(spi, cs, REG_INT_SOURCE)
     
-def Stream(Samples=1): #Have it check to see if everything is initialized, instead of doing some prior and some in the function!!
+def Stream(Samples=1,Calibrate=True): #Have it check to see if everything is initialized, instead of doing some prior and some in the function!!
     ReadState(1)
     data = []
     prev = [0,0,0]
@@ -135,39 +137,52 @@ def Stream(Samples=1): #Have it check to see if everything is initialized, inste
         #Format data
         curXYZ = ustruct.unpack_from("<3h", cur)
         
+        
         if curXYZ != prev: #Check if reading same sample
-            prev = curXYZ
             
             #Apply calibration
-            caliXYZ = (config.ScaleX * (curXYZ[0] - config.OffsetX),
-                       config.ScaleY * (curXYZ[1] - config.OffsetY),
-                       config.ScaleZ * (curXYZ[2] - config.OffsetZ))
-            data.append(caliXYZ)
+            if Calibrate == True:
+                caliXYZ = (config.ScaleX * (curXYZ[0] - config.OffsetX),
+                           config.ScaleY * (curXYZ[1] - config.OffsetY),
+                           config.ScaleZ * (curXYZ[2] - config.OffsetZ))
+                data.append(caliXYZ)
+            else:
+                data.append(curXYZ)
+            
             i = i + 1
             
         prev = curXYZ
     
     return data
   
-def FastStream(): #Optimized for speed, data needs further handling, used in main loop
-    buffer_size = const(1024*3)
+def FastStream(): #Optimized for speed, data likely needs further handling, used in main loop
+    buffer_size = const(2**11) #Want to overshoot to ensure we capture enough samples
     bps = const(6) #bytes per sample
-    
     data = bytearray(buffer_size*bps)
-    for i in range(0,buffer_size):
+    
+    i = 0
+    while i < buffer_size:
         data[bps*i:bps*i+bps] = reg_read(spi, cs, REG_DATAX0, bps)
-    '''    
-        if i % 64 == 0: #might not be needed, bytearray seems to be very cleverly done when compiled!
-            gc.collect()
+        i = i + 1
+    
     '''
+    prev = None
+    i = 0
+    while i < buffer_size:
+        datum = reg_read(spi, cs, REG_DATAX0, bps)
+        if prev != datum:
+            data[bps*i:bps*i+bps] = datum
+            prev = datum
+            i = i + 1
+    '''        
     return data
     
 def Calibrate():
     axis = int(input("Choose an axis for calibration: \n X = 0 \n Y = 1 \n Z = 2 \n"))
     input("Please stabilize the device to have the + side face UPWARDS. Press ENTER to continue") #work on wording!!!
-    UpperBound = Stream(100)
+    UpperBound = Stream(100,False)
     input("Please stabilize the device to have the - side face DOWNWARDS. Press ENTER to continue")
-    LowerBound = Stream(100)
+    LowerBound = Stream(100,False)
     AvgT = 0
     AvgB = 0
     N = len(UpperBound)

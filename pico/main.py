@@ -6,6 +6,8 @@ import analysis as anal
 import machine
 from picozero import pico_led
 import time
+import os
+import sys
 import gc
 
 pico_led.off()
@@ -14,46 +16,52 @@ acc.ReadState(1) #Turns on data reading
 acc.IntrState(1) #Turns on interrupts
 acc.ResetIntrState() #Ensures interrupt condition is reset
 
-def test(pin):
+def Strike(pin):
     pico_led.on()
     
-    print("mem before anything "+str(gc.mem_free()))
+    a = acc.FastStream() #Gathers data
     
-    a = acc.FastStream()
-    
-    print("mem after FastStream "+str(gc.mem_free()))
-    
-    b = anal.StripData(a)
+    name = stor.CreateBin(a) #DELETE ALL OF THIS LATER
     del a
-    
-    print("mem after StripData "+str(gc.mem_free()))
-    
-    name = stor.CreateBin(b)
-    del b
-    
-    print("mem after CreateBin "+str(gc.mem_free()))
-    
-    comm.SendData(name)
+
+    comm.SendData(name) #Sends data to Github repository
     del name
     
-    print("mem after SendData "+str(gc.mem_free())+"\n")
+    #Checks to see if other binary files weren't sent
+    files = os.listdir()
+    temp = []
+    for i in range(0,len(files)):
+        if files[i][-4:] == ".bin":
+            temp.append(files[i])
+    files = temp
+    del temp
+    
+    #Sends data to Github repository
+    for i in range(0,len(files)):
+        name = files[i]
+        #print(f'mem free before calling function {i+1} '+str(gc.mem_free()))
+        comm.SendData(name,gettime=False)
+    del files
     
     comm.Disconnect()
     acc.ResetIntrState()
-    
+   
+
     gc.collect()
     f = open("log.txt","a+")
     f.write(str(gc.mem_free())+"\n")
     f.close()
+
+    
+    #stor.LogError(3,len(files)+1)
     
     pico_led.off()
     time.sleep(0.1)
     pico_led.on()
     time.sleep(0.1)
     pico_led.off()
-    
-    #Sleep()
-    
+
+    #Sleep()        
 
 def test2(pin):
     pico_led.on()
@@ -63,11 +71,10 @@ def test2(pin):
     Sleep()
 
 
-acc.intr.irq(trigger=machine.Pin.IRQ_RISING,handler=test)
+acc.intr.irq(trigger=machine.Pin.IRQ_RISING,handler=Strike)
 
 def Sleep():
     while True:
         machine.deepsleep(1000000)
-        
+
 gc.collect()
-print("mem before even the loop "+str(gc.mem_free()))

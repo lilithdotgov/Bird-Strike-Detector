@@ -6,9 +6,22 @@ import machine
 import os
 
 def NameGen(): #Generate unique name for file
+    
     rng = random.randint(10000,99999)
     mac = config.mac.replace(":","-")
-    name = f'{config.MicroNum}_{mac}_{rng}' #Make sure these are all lower-case. Some OS's have case sensitive files
+    name = f'{config.MicroNum}_{mac}_{rng}.bin' #Make sure these are all lower-case. Some OS's have case sensitive files
+    
+    '''
+    files = os.listdir()
+    temp = []
+    for i in range(0,len(files)):
+        if files[i][-4:] == ".bin":
+            temp.append(files[i])
+    files = temp
+    del temp
+    name = str(len(files))
+    name = f'{name}.bin'
+    '''
     
     return name
 
@@ -43,12 +56,21 @@ def DeleteFile(FileName):
         LogError(4,err)
         print(err)
      
+def RenameFile(FileName,NewName):
+    try:
+        os.rename(FileName,NewName)
+        print(f'{FileName} changed to {NewName} successfully')
+    except OSError as err:
+        LogError(4,err)
+        print(err)
+     
 def LogError(error_type,msg=""): #work on this more
     Errors = ["Failed to connect to network. Please recheck credentials!\n",
               "Failed to communicate with accelerometer. Please ensure your cables are connected to the correct pins!\n",
               f'Failed to send data to server. Logs will be stored locally until next attempt. Error message:\n{msg}\n',
-              "Strike was successfully logged and sent!\n",
-              f'Failed to delete file. Error message:\n{msg}\n']
+              f'{msg} Strike(s) successfully logged and sent!\n',
+              f'Failed to modify file. Error message:\n{msg}\n',
+              f'Main loop failed at unspecific point. Error message:\n{msg}\n']
     f = open("log.txt","a+")
     if error_type in range(0,len(Errors)):
         f.write(Errors[error_type])
@@ -58,3 +80,4 @@ def LogError(error_type,msg=""): #work on this more
         f.write(f'Unknown error of type {machine.reset_cause()}/n')
         print(f'Unknown error of type {machine.reset_cause()}/n')
         f.close()
+    #machine.soft_reset()
