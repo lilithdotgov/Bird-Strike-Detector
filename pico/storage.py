@@ -53,7 +53,7 @@ def DeleteFile(FileName):
         os.remove(FileName)
         print(f'{FileName} deleted successfully')
     except OSError as err:
-        LogError(4,err)
+        LogError(5,err)
         print(err)
      
 def RenameFile(FileName,NewName):
@@ -61,11 +61,12 @@ def RenameFile(FileName,NewName):
         os.rename(FileName,NewName)
         print(f'{FileName} changed to {NewName} successfully')
     except OSError as err:
-        LogError(4,err)
+        LogError(5,err)
         print(err)
      
 def LogError(error_type,msg=""): #work on this more
-    Errors = ["Failed to connect to network. Please recheck credentials!\n",
+    Errors = [f'Generic Error Message:\n{msg}\n',
+              "Failed to connect to network. Please recheck credentials!\n",
               "Failed to communicate with accelerometer. Please ensure your cables are connected to the correct pins!\n",
               f'Failed to send data to server. Logs will be stored locally until next attempt. Error message:\n{msg}\n',
               f'{msg} Strike(s) successfully logged and sent!\n',

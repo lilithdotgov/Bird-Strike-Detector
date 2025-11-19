@@ -28,7 +28,7 @@ def Connect(): #Make new error checker later
         failures = failures + 1
         
         if failures > config.ComFailVal:
-            stor.LogError(0)
+            stor.LogError(1)
        
     print("Connected!")
 
@@ -60,14 +60,16 @@ def SendData(FileName,gettime=True):
 
     Connect()
     if gettime == True:
-        for i in range(0,config.SendVal): #make while loop, for is messy here
+        for i in range(0,config.ComFailVal): #make while loop, for is messy here
             try:
                 UTC = ntp.time()
                 tm = time.gmtime(UTC)
-                machine.RTC().datetime((tm[0], tm[1], tm[2], tm[6] + 1, tm[3], tm[4], tm[5], 0))
+                machine.RTC().datetime((tm[0], tm[1], tm[2], tm[6] + 1, tm[3], tm[4], tm[5], 0)) #Sets current time
             except OSError:
-                if i == config.SendVal - 1:
-                    stor.LogError(2,"Failed to get datetime")
+                if i == config.ComFailVal - 1:
+                    stor.LogError(3,"Failed to get NTP datetime. Using Crystal Oscillator instead")
+                    UTC = time.time()
+                    stor.RenameFile(FileName,f'{FileName[:-9]}{UTC}.bin')
                 time.sleep(3)    
             else:
                 stor.RenameFile(FileName,f'{FileName[:-9]}{UTC}.bin')
@@ -90,8 +92,8 @@ def SendData(FileName,gettime=True):
             stor.DeleteFile(path)
             #break
         else:
-            stor.LogError(2,res.text)
+            stor.LogError(3,res.text)
     except Exception as exc:
-        stor.LogError(2,exc)
+        stor.LogError(3,exc)
     
 

@@ -20,7 +20,7 @@ REG_DATAX0 = 0x32 #0x32 to 0x37 contain the data for each axis, each is 2 bytes.
 REG_INT_ENABLE = 0x2E #Interrupt Enable Register
 INT_ENABLE = 0x10 #Enables Activity mode
 REG_ACT_CTL = 0x27 #Enables which axis to be monitored for the interrupt modes. Plus an unused bonus feature, see doc pg. 23
-ACT_CTL = 0x10 #Selects which axis to turn on for the interrupt. See doc pg. 23
+ACT_CTL = 0b00100000 #Selects which axis to turn on for the interrupt. See doc pg. 23
 REG_INT_MAP = 0x2F #Chooses which pin(s) to use for interrupts
 INT_MAP = 0xEF #Sets activity mode interrupt to pin INT1
 REG_THRESH_ACT = 0x24 #Sets threshold for interrupt to occur. Single unsigned byte. threshold = 62.5mg * THRESH_ACT.
@@ -29,7 +29,7 @@ REG_FIFO_MODE = 0x38 #Register controlling FIFO modes
 FIFO_MODE = 0x80 #Sets FIFO mode to stream
 REG_INT_SOURCE = 0x30 #Read-only register, shows which interrupts were activated. Reading this resets the interrupt states
 REG_DATA_FORMAT = 0x31 #Used for formatting data, see pg. 26
-DATA_FORMAT = 0b00000010 #Importantly sets the data range, has other functionalities that are unused
+DATA_FORMAT = 0b00001010 #Importantly sets the data range, has other functionalities that are unused
 G = 9.80665     
 
 ##################### TODO: CHANGE PIN INTERRUPT TO DEFAULT TO LOW CURRENT AND HAVE HIGH CURRENT BE INTERRUPT EVENT
@@ -90,7 +90,7 @@ reg_read(spi, cs, REG_DEVID)
 def AccTest():
     data = reg_read(spi, cs, REG_DEVID)
     if (data != bytearray((DEVID,))):
-        stor.ErrorLog(1)
+        stor.LogError(2)
         machine.soft_reset()
 
 
