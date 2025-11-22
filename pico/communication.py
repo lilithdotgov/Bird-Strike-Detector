@@ -22,7 +22,7 @@ def Connect(): #Make new error checker later
 
     failures = 0
     while wlan.isconnected() == False:
-        time.sleep(3)
+        time.sleep(5)
         info = wlan.status()
         print(f'Connecting... Status = {info}')
         failures = failures + 1

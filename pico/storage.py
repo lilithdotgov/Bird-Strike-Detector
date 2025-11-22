@@ -64,7 +64,7 @@ def RenameFile(FileName,NewName):
         LogError(5,err)
         print(err)
      
-def LogError(error_type,msg=""): #work on this more
+def LogError(error_dtype,msg=""): #work on this more
     Errors = [f'Generic Error Message:\n{msg}\n',
               "Failed to connect to network. Please recheck credentials!\n",
               "Failed to communicate with accelerometer. Please ensure your cables are connected to the correct pins!\n",
@@ -81,4 +81,5 @@ def LogError(error_type,msg=""): #work on this more
         f.write(f'Unknown error of type {machine.reset_cause()}/n')
         print(f'Unknown error of type {machine.reset_cause()}/n')
         f.close()
-    #machine.soft_reset()
+    if error_type != 4:
+        machine.reset()

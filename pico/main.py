@@ -20,55 +20,59 @@ acc.IntrState(1) #Turns on interrupts
 acc.ResetIntrState() #Ensures interrupt condition is reset
 
 def Strike(pin):
-    pico_led.on()
-    
-    a = acc.FastStream() #Gathers data
-    
-    name = stor.CreateBin(a) 
-    del a
+    try:
+        pico_led.on()
+        
+        a = acc.FastStream() #Gathers data
+        
+        name = stor.CreateBin(a) 
+        del a
 
-    comm.SendData(name) #Sends data to Github repository
-    del name
-    
-    #Checks to see if other binary files weren't sent
-    files = os.listdir()
-    temp = []
-    for i in range(0,len(files)):
-        if files[i][-4:] == ".bin":
-            temp.append(files[i])
-    files = temp
-    del temp
-    
-    #Sends data to Github repository
-    for i in range(0,len(files)):
-        name = files[i]
-        #print(f'mem free before calling function {i+1} '+str(gc.mem_free()))
-        state = False
-        if name.index(".") - name.index("_",2) < 10:
-            state = True
-        comm.SendData(name,gettime=state)
-    #We delete files later so that we can first store a success message!!!
-    
-    comm.Disconnect()
-    acc.ResetIntrState()
-   
-    '''
-    gc.collect()
-    f = open("log.txt","a+")
-    f.write(str(gc.mem_free())+"\n")
-    f.close()
-    '''
-    
-    stor.LogError(4,len(files)+1)
-    del files
-    
-    pico_led.off()
-    time.sleep(0.1)
-    pico_led.on()
-    time.sleep(0.1)
-    pico_led.off()
+        comm.SendData(name) #Sends data to Github repository
+        del name
+        
+        #Checks to see if other binary files weren't sent
+        files = os.listdir()
+        temp = []
+        for i in range(0,len(files)):
+            if files[i][-4:] == ".bin":
+                temp.append(files[i])
+        files = temp
+        del temp
+        
+        #Sends data to Github repository
+        for i in range(0,len(files)):
+            name = files[i]
+            #print(f'mem free before calling function {i+1} '+str(gc.mem_free()))
+            state = False
+            if name.index(".") - name.index("_",2) < 10:
+                state = True
+            comm.SendData(name,gettime=state)
+        #We delete files later so that we can first store a success message!!!
+        
+        comm.Disconnect()
+        acc.ResetIntrState()
+       
+        '''
+        gc.collect()
+        f = open("log.txt","a+")
+        f.write(str(gc.mem_free())+"\n")
+        f.close()
+        '''
+        
+        stor.LogError(4,len(files)+1)
+        del files
+        
+        pico_led.off()
+        time.sleep(0.1)
+        pico_led.on()
+        time.sleep(0.1)
+        pico_led.off()
 
-    Sleep()        
+        Sleep()        
+    except Exception as exc:
+        print(err)
+        LogError(6,err)
 
 def test2(pin):
     pico_led.on()
