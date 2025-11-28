@@ -90,8 +90,7 @@ reg_read(spi, cs, REG_DEVID)
 def AccTest():
     data = reg_read(spi, cs, REG_DEVID)
     if (data != bytearray((DEVID,))):
-        stor.LogError(2)
-        machine.soft_reset()
+        stor.LogError("Failed to communicate with accelerometer. Please ensure your cables are connected to the correct pins!\n")
 
 
 def ReadState(state):

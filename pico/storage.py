@@ -9,7 +9,7 @@ def NameGen(): #Generate unique name for file
     
     rng = random.randint(10000,99999)
     mac = config.mac.replace(":","-")
-    name = f'{config.MicroNum}_{mac}_{rng}.bin' #Make sure these are all lower-case. Some OS's have case sensitive files
+    name = f'{config.MicroNum}_{mac}_{rng}.bin' 
     
     '''
     files = os.listdir()
@@ -25,6 +25,8 @@ def NameGen(): #Generate unique name for file
     
     return name
 
+#TODO: Do some basic compression on the file when you can
+#TODO: Maybe include the error log after the data?
 def CreateBin(data): #Creates binary file of data. First 24 bytes are calibration settings
     while True:
         name = NameGen()
@@ -53,33 +55,22 @@ def DeleteFile(FileName):
         os.remove(FileName)
         print(f'{FileName} deleted successfully')
     except OSError as err:
-        LogError(5,err)
-        print(err)
+        LogError(f'Failed to modify file. Error message:\n{err}\n')
      
 def RenameFile(FileName,NewName):
     try:
         os.rename(FileName,NewName)
         print(f'{FileName} changed to {NewName} successfully')
     except OSError as err:
-        LogError(5,err)
-        print(err)
-     
-def LogError(error_dtype,msg=""): #work on this more
-    Errors = [f'Generic Error Message:\n{msg}\n',
-              "Failed to connect to network. Please recheck credentials!\n",
-              "Failed to communicate with accelerometer. Please ensure your cables are connected to the correct pins!\n",
-              f'Failed to send data to server. Logs will be stored locally until next attempt. Error message:\n{msg}\n',
-              f'{msg} Strike(s) successfully logged and sent!\n',
-              f'Failed to modify file. Error message:\n{msg}\n',
-              f'Main loop failed at unspecific point. Error message:\n{msg}\n']
+        LogError(f'Failed to modify file. Error message:\n{err}\n')
+    
+#TODO: Make this less awful, dear god this implementation sucks!
+#Okay, I improved it but it may still need further work...
+def LogError(msg="",reset=True): 
+    print(msg)
     f = open("log.txt","a+")
-    if error_type in range(0,len(Errors)):
-        f.write(Errors[error_type])
-        print(Errors[error_type])
-        f.close()
-    else:    
-        f.write(f'Unknown error of type {machine.reset_cause()}/n')
-        print(f'Unknown error of type {machine.reset_cause()}/n')
-        f.close()
-    if error_type != 4:
+    f.write(msg)
+    f.close()
+
+    if reset == True:
         machine.reset()

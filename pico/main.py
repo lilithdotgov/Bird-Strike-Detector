@@ -14,6 +14,7 @@ import gc
 
 
 pico_led.off()
+comm.Disconnect() #Kills any leftover connections
 acc.AccTest() #Tests accelerometer can be communicated with
 acc.ReadState(1) #Turns on data reading
 acc.IntrState(1) #Turns on interrupts
@@ -60,7 +61,7 @@ def Strike(pin):
         f.close()
         '''
         
-        stor.LogError(4,len(files)+1)
+        stor.LogError(f'{len(files)+1} Strike(s) successfully logged and sent!\n',reset=False)
         del files
         
         pico_led.off()
@@ -70,9 +71,9 @@ def Strike(pin):
         pico_led.off()
 
         Sleep()        
-    except Exception as exc:
+    except Exception as err:
         print(err)
-        LogError(6,err)
+        stor.LogError(f'Main loop failed at unspecific point. Error message:\n{err}\n')
 
 def test2(pin):
     pico_led.on()
@@ -99,10 +100,10 @@ def Sleep(): #Maybe make function into part of a new module?
     
     machine.mem32[REG_DORMANT_WAKE_INT] = DORMANT_WAKE_INT #Fixes bug present in current micropython code
     
+    print("Shutting down to sleep...")
     pico_led.off()
     machine.lightsleep()
     
-    #stor.LogError(0,"You should not see this message!")
     
 acc.intr.irq(trigger=machine.Pin.IRQ_RISING,handler=Strike) #Create interrupt
 gc.collect() #Likely unnecessary, but leave for now
