@@ -10,29 +10,35 @@ import os
 import sys
 import gc
 
-
-
-
+#Initialization:
 pico_led.off()
 comm.Disconnect() #Kills any leftover connections
 acc.AccTest() #Tests accelerometer can be communicated with
-acc.ReadState(1) #Turns on data reading
-acc.IntrState(1) #Turns on interrupts
-acc.ResetIntrState() #Ensures interrupt condition is reset
+acc.ReadStateOn() #Turns on data reading
+acc.IntrStateOn() #Turns on interrupts
+acc.intr.irq(trigger=machine.Pin.IRQ_RISING,handler=ISR) #Create interrupt
+strike_flag = False #Global variable that main loop checks to see if a strike occured
+sleep_flag = False #Global variable used to check if currently attempting to sleep
 
-def Strike(pin):
+def ISR(pin): #Handles the interrupt
+    global strike_flag
+    strike_flag = True
+    if sleep_flag:
+        acc.ResetIntrState() #Reset interrupt state to allow for future interrupts
+        
+def Strike(): #Main function that collects, stores, and sends the strike data
     try:
         pico_led.on()
         
-        a = acc.FastStream() #Gathers data
+        data = acc.FastStream() #Gathers data
         
-        name = stor.CreateBin(a) 
-        del a
+        name = stor.CreateBin(data) #returns name of the newly made file
+        del data
 
         comm.SendData(name) #Sends data to Github repository
         del name
         
-        #Checks to see if other binary files weren't sent
+        #Checks to see if there exist past strikes that weren't sent
         files = os.listdir()
         temp = []
         for i in range(0,len(files)):
@@ -50,9 +56,6 @@ def Strike(pin):
                 state = True
             comm.SendData(name,gettime=state)
         #We delete files later so that we can first store a success message!!!
-        
-        comm.Disconnect()
-        acc.ResetIntrState()
        
         '''
         gc.collect()
@@ -69,21 +72,19 @@ def Strike(pin):
         pico_led.on()
         time.sleep(0.1)
         pico_led.off()
-
-        Sleep()        
+        
+        comm.Disconnect()
+        global strike_flag
+        strike_flag = False
+    
     except Exception as err:
         print(err)
         stor.LogError(f'Main loop failed at unspecific point. Error message:\n{err}\n')
 
-def test2(pin):
-    pico_led.on()
-    time.sleep(2.5)
-    pico_led.off()
-    time.sleep(0.5)
-    acc.ResetIntrState()
-    Sleep()
-
-def Sleep(): #Maybe make function into part of a new module?
+def Sleep():
+    global sleep_flag
+    sleep_flag = True 
+    
     #There is a bug present in the current micropython port of the deep/lightsleep function to the rp2
     #in which the system fails to wake up after recieving an interrupt. You can see this via the code
     #on github which only accepts interrupts from the CYW43 wifi chip:
@@ -102,11 +103,16 @@ def Sleep(): #Maybe make function into part of a new module?
     
     print("Shutting down to sleep...")
     pico_led.off()
+    acc.ResetIntrState()
     machine.lightsleep()
     
-    
-acc.intr.irq(trigger=machine.Pin.IRQ_RISING,handler=Strike) #Create interrupt
-gc.collect() #Likely unnecessary, but leave for now
-        
+    sleep_flag = False #Occurs after sleep is over
+      
+
 time.sleep(5) #Gives time for user to exit main.py if attempting to access code
-Sleep()
+#Main loop:
+while True:
+    if strike_flag:
+        Strike()
+    
+    Sleep()

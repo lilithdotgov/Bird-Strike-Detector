@@ -1,4 +1,4 @@
-####################################### Data Management Code ##################################
+################################ Internal Data Management Code ################################
 import config
 import random
 import ustruct

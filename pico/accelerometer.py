@@ -52,7 +52,7 @@ cs.value(1)
 #SCK also needs to idle at high, can be done via a useless read
 #This can be found below the read function
 
-def reg_write(spi, cs, reg, data): #upgrade to support multiple byte writes
+def reg_write(spi, cs, reg, data):
     msg = bytearray() #creates bytearray to store message. Represents hex as valid ASCII when printed
     msg.append(reg & ~(0x03 << 6)) #inserts register of the message. set first 2 bits W and MB to 0, see doc pg. 14
     msg.append(data) #inserts the data of the message
@@ -86,43 +86,36 @@ def reg_read(spi, cs, reg, nbytes=1):
 reg_read(spi, cs, REG_DEVID)
 
 
-# Read device ID to make sure that we can communicate with the ADXL343
+#Read device ID to make sure that we can communicate with the ADXL343
 def AccTest():
     data = reg_read(spi, cs, REG_DEVID)
     if (data != bytearray((DEVID,))):
         stor.LogError("Failed to communicate with accelerometer. Please ensure your cables are connected to the correct pins!\n")
 
-
-def ReadState(state):
-    if state == 0:
-        PowerControl = reg_read(spi, cs, REG_POWER_CTL) #Obtain current Power Control setting
-        PowerControl = int.from_bytes(PowerControl, "big") & ~(0x01 << 3) #Change Power Control Measure bit to 0 to end data collecition, see pg. 
-        reg_write(spi, cs, REG_POWER_CTL, PowerControl) #Write change
+def ReadStateOff():
+    PowerControl = reg_read(spi, cs, REG_POWER_CTL) #Obtain current Power Control setting
+    PowerControl = int.from_bytes(PowerControl, "big") & ~(0x01 << 3) #Change Power Control Measure bit to 0 to end data collecition, see pg. 
+    reg_write(spi, cs, REG_POWER_CTL, PowerControl) #Write change
  
-    
-    elif state == 1:
-        reg_write(spi, cs, REG_RATE, RATE) #Sets Data Output Rate
-        reg_write(spi, cs, REG_DATA_FORMAT, DATA_FORMAT) #Sets Data Format
-        PowerControl = reg_read(spi, cs, REG_POWER_CTL) #Obtain current Power Control setting
-        PowerControl = int.from_bytes(PowerControl, "big") | (0x01 << 3) #Change Power Control Measure bit to 1 to begin data collecition, see pg. 
-        reg_write(spi, cs, REG_POWER_CTL, PowerControl) #Write change
+def ReadStateOn():    
+    reg_write(spi, cs, REG_RATE, RATE) #Sets Data Output Rate
+    reg_write(spi, cs, REG_DATA_FORMAT, DATA_FORMAT) #Sets Data Format
+    PowerControl = reg_read(spi, cs, REG_POWER_CTL) #Obtain current Power Control setting
+    PowerControl = int.from_bytes(PowerControl, "big") | (0x01 << 3) #Change Power Control Measure bit to 1 to begin data collecition, see pg. 
+    reg_write(spi, cs, REG_POWER_CTL, PowerControl) #Write change
  
-    else:
-        print("Invalid Input. Please choose one of the following power modes:\n Off: 0\n On: 1")
         
-def IntrState(state): #Add functionality to better undo this later!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    if state == 0:
-        reg_write(spi, cs, REG_INT_ENABLE, 0x00) #A value of 0x00 disables all interrupts
-    elif state == 1:
-        reg_write(spi, cs, REG_INT_MAP, INT_MAP) #Sets INT pin
-        reg_write(spi, cs, REG_THRESH_ACT, THRESH_ACT) #Sets threshold
-        reg_write(spi, cs, REG_FIFO_MODE, FIFO_MODE) #Sets FIFO mode
-        reg_write(spi, cs, REG_ACT_CTL, ACT_CTL) #Sets axes for monitoring
+def IntrStateOff():
+    reg_write(spi, cs, REG_INT_ENABLE, 0x00) #A value of 0x00 disables all interrupts
+        
+def IntrStateOn():
+    reg_write(spi, cs, REG_INT_MAP, INT_MAP) #Sets INT pin
+    reg_write(spi, cs, REG_THRESH_ACT, THRESH_ACT) #Sets threshold
+    reg_write(spi, cs, REG_FIFO_MODE, FIFO_MODE) #Sets FIFO mode
+    reg_write(spi, cs, REG_ACT_CTL, ACT_CTL) #Sets axes for monitoring
 
-        reg_write(spi, cs, REG_INT_ENABLE, INT_ENABLE) #Enables interrupts. Must go last, see doc pg. 18
-    else:
-        print("Invalid Input. Please choose one of the following bin modes:\n Off: 0\n On: 1")
-    
+    reg_write(spi, cs, REG_INT_ENABLE, INT_ENABLE) #Enables interrupts. Must go last, see doc pg. 18
+
 def ResetIntrState():
     reg_read(spi, cs, REG_INT_SOURCE)
     

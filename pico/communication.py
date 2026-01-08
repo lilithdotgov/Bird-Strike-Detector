@@ -73,11 +73,17 @@ def SendData(FileName,gettime=True):
     if gettime == True:
         #Assign a time before attempting to get a more accurate one
         UTC = time.time()
-        stor.RenameFile(FileName,f'{FileName[:-9]}{UTC}.bin') #Updates name with timestamp
-        FileName = f'{FileName[:-9]}{UTC}.bin' #Update name for further references
+        stor.RenameFile(FileName,f'{FileName[:-9]}{UTC}.bin') #Updates file name with timestamp
+        FileName = f'{FileName[:-9]}{UTC}.bin' #Update variable name for further references
         
         for i in range(0,config.ComFailVal): #make while loop, for is messy here
             Connect()
+            
+            #TODO: Delete later
+            f = open("log.txt","a+") 
+            f.write(f'Connection = {wlan.isconnected()}. NTP attempt # = {i}\n')
+            f.close()
+            
             try:    
                 UTC = ntp.time()
                 tm = time.gmtime(UTC)
@@ -91,6 +97,12 @@ def SendData(FileName,gettime=True):
                     #We don't reset since error may be on NTP side rather than our own
                     break
                 time.sleep(5)    
+
+    #TODO: Delete later
+    f = open("log.txt","a+") 
+    f.write(f'Connection = {wlan.isconnected()}. Attempting to send to github\n')
+    f.close()
+
 
     ### PATH PARAMETERS ###
     owner = config.GithubAcc
