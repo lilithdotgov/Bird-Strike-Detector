@@ -26,7 +26,11 @@ def Strike(): #Main function that collects, stores, and sends the strike data
         name = stor.CreateBin(data) #returns name of the newly made file
         del data
 
-        comm.SendData(name) #Sends data to Github repository
+        name = comm.SendData(name) #Sends data to Github repository, returns new name of file
+        
+        nfiles = 0 #Number of files, used to keep track of how many were successfully sent
+        if name not in os.listdir():
+            nfiles = nfiles + 1
         del name
         
         #Checks to see if there exist past strikes that weren't sent
@@ -35,6 +39,7 @@ def Strike(): #Main function that collects, stores, and sends the strike data
         for i in range(0,len(files)):
             if files[i][-4:] == ".bin":
                 temp.append(files[i])
+                nfiles = nfiles + 1
         files = temp
         del temp
         
@@ -43,21 +48,17 @@ def Strike(): #Main function that collects, stores, and sends the strike data
             name = files[i]
             #print(f'mem free before calling function {i+1} '+str(gc.mem_free()))
             state = False
-            if name.index(".") - name.index("_",2) < 10:
+            if name.index(".") - name.index("_",2) < 10: #Checks whether we already gave the file a timestamp. TODO: Add extra flag to indicate that file had no timestamp originally
                 state = True
             comm.SendData(name,gettime=state)
-        #We delete files later so that we can first store a success message!!!
-       
-        '''
-        gc.collect()
-        f = open("log.txt","a+")
-        f.write(str(gc.mem_free())+"\n")
-        f.close()
-        '''
-        
-        stor.LogError(f'{len(files)+1} Strike(s) successfully logged and sent!\n',reset=False)
+            if name in os.listdir(): #Checks whether we actually sent the file, if still in os then decriment nfiles
+                nfiles = nfiles - 1
         del files
+
+        stor.LogError(f'{nfiles} Strike(s) successfully logged and sent!\n',reset=False)
+        del nfiles
         
+        #Double blink
         pico_led.off()
         time.sleep(0.1)
         pico_led.on()
@@ -71,7 +72,7 @@ def Strike(): #Main function that collects, stores, and sends the strike data
         comm.Disconnect()
         global strike_flag
         strike_flag = False
-    
+        
     except Exception as err:
         print(err)
         stor.LogError(f'Main loop failed at unspecific point. Error message:\n{err}\n')
@@ -124,6 +125,14 @@ time.sleep(5) #Gives time for user to exit main.py if attempting to access code
 
 #Main loop:
 while True:
+    #Use following code to check for memory leaks each loop when debugging:
+    '''
+    gc.collect()
+    f = open("log.txt","a+")
+    f.write(str(gc.mem_free())+"\n")
+    f.close()
+    '''
+    
     if strike_flag:
         Strike()
     

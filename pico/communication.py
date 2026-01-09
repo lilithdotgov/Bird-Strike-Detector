@@ -66,17 +66,13 @@ def SendData(FileName,gettime=True):
         "User-Agent": f'{config.GithubAcc}'}#,
         #"Connection": "close"}
 
-   
-    
-    
-    
     if gettime == True:
         #Assign a time before attempting to get a more accurate one
         UTC = time.time()
         stor.RenameFile(FileName,f'{FileName[:-9]}{UTC}.bin') #Updates file name with timestamp
         FileName = f'{FileName[:-9]}{UTC}.bin' #Update variable name for further references
         
-        for i in range(0,config.ComFailVal): #make while loop, for is messy here
+        for i in range(0,config.ComFailVal): #TODO: maybe make while loop, for is kinda messy here
             Connect()
             
             #TODO: Delete later
@@ -117,8 +113,9 @@ def SendData(FileName,gettime=True):
             print(f'Successful data transfer to {repo}!')
             stor.DeleteFile(path)
         else:
-            stor.LogError(f'Failed to send data to server. Logs will be stored locally until next attempt. Error message:\n{res.text}\n')
+            stor.LogError(f'Failed to send data to server. Logs will be stored locally until next attempt. Error message:\n{res.text}\n',reset=False)
     except Exception as err:
-        stor.LogError(f'Failed to send data to server. Logs will be stored locally until next attempt. Error message:\n{err}\n')
+        stor.LogError(f'Failed to send data to server. Logs will be stored locally until next attempt. Error message:\n{err}\n',reset=False)
     
+    return FileName
 
