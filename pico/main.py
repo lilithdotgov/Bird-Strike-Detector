@@ -10,16 +10,7 @@ import os
 import sys
 import gc
 
-#Initialization:
-pico_led.off()
-comm.Disconnect() #Kills any leftover connections
-acc.AccTest() #Tests accelerometer can be communicated with
-acc.ReadStateOn() #Turns on data reading
-acc.IntrStateOn() #Turns on interrupts
-acc.intr.irq(trigger=machine.Pin.IRQ_RISING,handler=ISR) #Create interrupt
-strike_flag = False #Global variable that main loop checks to see if a strike occured
-sleep_flag = False #Global variable used to check if currently attempting to sleep
-
+#Functions:
 def ISR(pin): #Handles the interrupt
     global strike_flag
     strike_flag = True
@@ -72,6 +63,10 @@ def Strike(): #Main function that collects, stores, and sends the strike data
         pico_led.on()
         time.sleep(0.1)
         pico_led.off()
+        time.sleep(0.1)
+        pico_led.on()
+        time.sleep(0.1)
+        pico_led.off()
         
         comm.Disconnect()
         global strike_flag
@@ -103,13 +98,30 @@ def Sleep():
     
     print("Shutting down to sleep...")
     pico_led.off()
+    
+    time.sleep(0.2)
+    pico_led.on()
+    time.sleep(0.2)
+    pico_led.off()
+    
     acc.ResetIntrState()
     machine.lightsleep()
     
     sleep_flag = False #Occurs after sleep is over
       
 
+#Initialization:
+pico_led.off()
+comm.Disconnect() #Kills any leftover connections
+acc.AccTest() #Tests accelerometer can be communicated with
+acc.ReadStateOn() #Turns on data reading
+acc.IntrStateOn() #Turns on interrupts
+acc.intr.irq(trigger=machine.Pin.IRQ_RISING,handler=ISR) #Create interrupt
+strike_flag = False #Global variable that main loop checks to see if a strike occured
+sleep_flag = False #Global variable used to check if currently attempting to sleep
 time.sleep(5) #Gives time for user to exit main.py if attempting to access code
+
+
 #Main loop:
 while True:
     if strike_flag:

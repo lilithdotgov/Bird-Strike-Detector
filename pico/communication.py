@@ -112,7 +112,7 @@ def SendData(FileName,gettime=True):
     try:
         print("attempting to send "+str(gc.mem_free()))
         gc.collect() #requests is bad, this is needed because C cannot be trusted
-        res = requests.put(f'https://api.github.com/repos/{owner}/{repo}/contents/{path}', headers = head, data = contents)
+        res = requests.put(f'https://api.github.com/repos/{owner}/{repo}/contents/{path}', headers = head, data = contents, timeout = 10)
         if path in res.text: #Basic check to ensure the data was sent properly. TODO: Improve if needed
             print(f'Successful data transfer to {repo}!')
             stor.DeleteFile(path)
