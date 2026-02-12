@@ -1,15 +1,19 @@
 ####################################### Main Code Loop ########################################
+
 import communication as comm
 import accelerometer as acc
 import storage as stor
 import analysis as anal
+
 import machine
+'''
 from picozero import pico_led
+'''
 import time
 import os
 import sys
 import gc
-
+'''
 #Functions:
 def ISR(pin): #Handles the interrupt
     global strike_flag
@@ -76,7 +80,7 @@ def Strike(): #Main function that collects, stores, and sends the strike data
     except Exception as err:
         print(err)
         stor.LogError(f'Main loop failed at unspecific point. Error message:\n{err}\n')
-
+'''
 def Sleep():
     global sleep_flag
     sleep_flag = True 
@@ -93,47 +97,81 @@ def Sleep():
     #https://pip-assets.raspberrypi.com/categories/1214-rp2350/documents/RP-008373-DS-2-rp2350-datasheet.pdf?disposition=inline#reg-io_bank0-DORMANT_WAKE_INTE0
     
     REG_DORMANT_WAKE_INT =  0x40028000 + 0x2e0 #User bank address plus offset
-    DORMANT_WAKE_INT = 1 << 19 #bit 19 turns on GPIO20 as a dormant interrupt when rising
+    DORMANT_WAKE_INT = 0b1 << 19 #bit 19 turns on GPIO20 as a dormant interrupt when rising
     
     machine.mem32[REG_DORMANT_WAKE_INT] = DORMANT_WAKE_INT #Fixes bug present in current micropython code
     
-    print("Shutting down to sleep...")
+    #We want to put RAM into sleep mode (data saved but can't be accessed) to reduce power consumption further
+    
+    REG_SYSCFG_BASE = 0x40008000 #Registers for system configuration settings, see doc pg. 1253
+    REG_MEMPOWERDOWN_OFFSET = 0x10 #Register offset for putting RAM into sleep 
+    MEMPOWERDOWN = 0b1111111111 #Turns off SRAM 0 to 9
+    
+    #machine.mem32[REG_SYSCFG_BASE + REG_MEMPOWERDOWN_OFFSET] = MEMPOWERDOWN #Writes the change
+    
+    #For some reason, SRAM 0 to 9 are placed in two blocks in the chip, which are called SRAM0 and SRAM1
+    #This is utterly confusing, but assume if talking about SRAM0 and 1 only then it's about all the banks
+    #from 0 to 9
+    REG_POWMAN_BASE = 0x40100000 #Registers for power management
+    POWMAN_PASSWORD = 0x5AFE << 16 #Offsets from 0x0 to 0xAC require this password be written to the top 16 bits 
+    REG_STATE_OFFSET = 0x38 #Controls the power state of the 4 power domains, SWCORE, XIP, SRAM0, SRAM1
+    STATE = 0b11 << 4 #Turns off SRAM0 and SRAM1
+    
+    machine.mem32[REG_POWMAN_BASE + REG_STATE_OFFSET] = STATE | POWMAN_PASSWORD #Writes the change
+    
+    #IT WORKS!!!!
+    #TODO: Reenable it after wakeup, do some testing, and see if u can push it further too with XIP and SWCORE
+    
+    #comm.Disconnect()
+    
+    #print("Shutting down to sleep...")
+    '''
     pico_led.off()
     
+    time.sleep(1)
+    pico_led.off()
     time.sleep(0.2)
     pico_led.on()
     time.sleep(0.2)
     pico_led.off()
+    '''
     
+    '''
     acc.ResetIntrState()
+    '''
+    
+    
+    
     machine.lightsleep()
+    
+    #machine.mem32[REG_SYSCFG_BASE + REG_MEMPOWERDOWN_OFFSET] = 0 #Powers up SRAM again
+    #pico_led.on()
     
     sleep_flag = False #Occurs after sleep is over
       
 
 #Initialization:
-pico_led.off()
+
+'''
+pico_led.on()
+'''
+'''
 comm.Disconnect() #Kills any leftover connections
 acc.AccTest() #Tests accelerometer can be communicated with
 acc.ReadStateOn() #Turns on data reading
 acc.IntrStateOn() #Turns on interrupts
 acc.intr.irq(trigger=machine.Pin.IRQ_RISING,handler=ISR) #Create interrupt
+'''
 strike_flag = False #Global variable that main loop checks to see if a strike occured
 sleep_flag = False #Global variable used to check if currently attempting to sleep
 time.sleep(5) #Gives time for user to exit main.py if attempting to access code
 
-
+'''
 #Main loop:
 while True:
-    #Use following code to check for memory leaks each loop when debugging:
-    '''
-    gc.collect()
-    f = open("log.txt","a+")
-    f.write(str(gc.mem_free())+"\n")
-    f.close()
-    '''
-    
     if strike_flag:
         Strike()
     
     Sleep()
+'''
+Sleep()
