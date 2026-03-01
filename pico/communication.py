@@ -24,11 +24,6 @@ def Connect(): #Make new error checker later
         print('Waiting for connection...')
         wlan.connect(config.ssid, config.password)
 
-        '''
-        f = open("log.txt","a+")
-        f.write("Starting Connection"+"\n")
-        f.close()
-        '''
         failures = 0
         while wlan.isconnected() == False:
             time.sleep(5)
@@ -44,6 +39,7 @@ def Connect(): #Make new error checker later
 def Disconnect():
     wlan.disconnect()
     wlan.active(False)
+    wlan.deinit()
 
 def SendData(FileName,gettime=True):
     f = open(FileName, "rb")
