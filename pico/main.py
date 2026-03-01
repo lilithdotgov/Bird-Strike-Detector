@@ -1,7 +1,24 @@
 ####################################### Main Code Loop ########################################
-from machine import mem32, lightsleep, reset, Pin
+#At the very beginning of booting we want to only import the BARE NECESSITIES to capture a strike
+#If we spend too long importing and initializing we will miss the strike, sadly this leaves the code
+#looking awful.
+#TODO: see if there's a nicer way of implementing this
+
+
 import accelerometer as acc
-import storage as stor
+from machine import mem32, lightsleep, reset, Pin
+strike_flag = False
+if Pin(20).value(): #Checks to see if a strike occured
+        data = acc.FastStream() #Gathers data
+        
+        import storage as stor
+        stor.CreateBin(data) #Saves data to file
+        del data
+        acc.ResetIntrState()
+        strike_flag = True
+        
+        
+import storage as stor #Import incase this wasn't a strike
 import communication as comm
 from time import sleep
 from os import listdir
@@ -11,20 +28,10 @@ def ISR(pin): #Handles the interrupt
     if sleep_flag:
         acc.ResetIntrState() #Reset interrupt state to allow for future interrupts
         
-def Strike(): #Main function that collects, stores, and sends the strike data
+def Strike(): #Looks for strike logs in storage and sends them
     try:
-        data = acc.FastStream() #Gathers data
-        
-        name = stor.CreateBin(data) #returns name of the newly made file
-        del data
-        
-        name = comm.SendData(name) #Sends data to Github repository, returns new name of file
-        
         nfiles = 0 #Number of files, used to keep track of how many were successfully sent
-        if name not in listdir():
-            nfiles = nfiles + 1
-        del name
-        
+    
         #Checks to see if there exist past strikes that weren't sent
         files = listdir()
         temp = []
@@ -38,9 +45,9 @@ def Strike(): #Main function that collects, stores, and sends the strike data
         #Sends data to Github repository
         for i in range(0,len(files)):
             name = files[i]
-            #print(f'mem free before calling function {i+1} '+str(gc.mem_free()))
+            
             state = False
-            if name.index(".") - name.index("_",2) < 10: #Checks whether we already gave the file a timestamp. TODO: Add extra flag to indicate that file had no timestamp originally
+            if name.index(".") - name.index("_",10) < 10: #Checks whether we already gave the file a timestamp. TODO: Add extra flag to indicate that file had no timestamp originally
                 state = True
             comm.SendData(name,gettime=state)
             if name in listdir(): #Checks whether we actually sent the file, if still in os then decriment nfiles
@@ -109,11 +116,12 @@ acc.ReadStateOn() #Turns on data reading
 acc.IntrStateOn() #Turns on interrupts
 acc.intr.irq(trigger=Pin.IRQ_RISING,handler=ISR) #Create interrupt
 
-if Pin(20).value(): #Checks to see if a strike occured
+if strike_flag: #Checks to see if a strike occured
     Strike()
+    strike_flag = False 
     acc.ResetIntrState()
     reset()
 else: #This is first time device is being run or right after a strike
     sleep(5) #Gives time for user to exit main.py if attempting to access code
-stor.Log("Sleep!")
+
 Sleep()

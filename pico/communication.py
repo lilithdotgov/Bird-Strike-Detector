@@ -89,16 +89,13 @@ def SendData(FileName,gettime=True):
                     break
                 sleep(5)    
 
-    #TODO: Delete later
-    f = open("log.txt","a+") 
-    f.write(f'Connection = {wlan.isconnected()}. Attempting to send to github\n')
-    f.close()
-
-
     ### PATH PARAMETERS ###
     owner = config.GithubAcc
     repo = config.Repository
     path = FileName
+    
+    if wlan.isconnected() == False:
+        Connect()
     
     try:
         collect() #requests is bad, this is needed because C cannot be trusted

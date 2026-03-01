@@ -1,35 +1,35 @@
 ####################################### Acceleromter Code #####################################
 from machine import Pin, SPI, reset
-#The following imports are only needed for test functions:
-from ustruct import unpack_from
-import config
-import storage as stor
+#Following code is commented out for speed, enable it to run debug functions:
+#from ustruct import unpack_from
+#import config
+#import storage as stor
 
 #Documentation: https://www.analog.com/media/en/technical-documentation/data-sheets/adxl343.pdf
 #Notes:
 #To read data first bit W should be 1, to write it should be 0
 #To read/write multiple bytes in one call second bit MB is set to 1, else 0 for a single byte
 #Chip Select (CS) needs to be set to 0 whenever doing read/write, and set to 1 afterwards
-REG_DEVID = 0x00 #Used to test that we are reading from correct spot. Check doc pg. 23
-DEVID = 0xE5 #Should recieve this default value when reading the Device ID Register (REG_DEVID)
-REG_POWER_CTL = 0x2D #Power Control Register, used to enable/disable data output
-REG_RATE = 0x2C #Rate of output data
-RATE = 0b1101 #0b1101 is 800RATE Data Output Rate, see doc pg. 12 for more ranges
-REG_DATAX0 = 0x32 #0x32 to 0x37 contain the data for each axis, each is 2 bytes. Order is x, y, and z
-REG_INT_ENABLE = 0x2E #Interrupt Enable Register
-INT_ENABLE = 0x10 #Enables Activity mode
-REG_ACT_CTL = 0x27 #Enables which axis to be monitored for the interrupt modes. Plus an unused bonus feature, see doc pg. 23
-ACT_CTL = 0b00100000 #Selects which axis to turn on for the interrupt. See doc pg. 23
-REG_INT_MAP = 0x2F #Chooses which pin(s) to use for interrupts
-INT_MAP = 0xEF #Sets activity mode interrupt to pin INT1
-REG_THRESH_ACT = 0x24 #Sets threshold for interrupt to occur. Single unsigned byte. threshold = 62.5mg * THRESH_ACT.
-THRESH_ACT = 0x08 #0x20 = 32, 32 * 62.5mg = 2g 
-REG_FIFO_MODE = 0x38 #Register controlling FIFO modes
-FIFO_MODE = 0x80 #Sets FIFO mode to stream
-REG_INT_SOURCE = 0x30 #Read-only register, shows which interrupts were activated. Reading this resets the interrupt states
-REG_DATA_FORMAT = 0x31 #Used for formatting data, see pg. 26
-DATA_FORMAT = 0b00001010 #Importantly sets the data range, has other functionalities that are unused
-G = 9.80665     
+REG_DEVID = const(0x00) #Used to test that we are reading from correct spot. Check doc pg. 23
+DEVID = const(0xE5) #Should recieve this default value when reading the Device ID Register (REG_DEVID)
+REG_POWER_CTL = const(0x2D) #Power Control Register, used to enable/disable data output
+REG_RATE = const(0x2C) #Rate of output data
+RATE = const(0b1101) #0b1101 is 800RATE Data Output Rate, see doc pg. 12 for more ranges
+REG_DATAX0 = const(0x32) #0x32 to 0x37 contain the data for each axis, each is 2 bytes. Order is x, y, and z
+REG_INT_ENABLE = const(0x2E) #Interrupt Enable Register
+INT_ENABLE = const(0x10) #Enables Activity mode
+REG_ACT_CTL = const(0x27) #Enables which axis to be monitored for the interrupt modes. Plus an unused bonus feature, see doc pg. 23
+ACT_CTL = const(0b00100000) #Selects which axis to turn on for the interrupt. See doc pg. 23
+REG_INT_MAP = const(0x2F) #Chooses which pin(s) to use for interrupts
+INT_MAP = const(0xEF) #Sets activity mode interrupt to pin INT1
+REG_THRESH_ACT = const(0x24) #Sets threshold for interrupt to occur. Single unsigned byte. threshold = 62.5mg * THRESH_ACT.
+THRESH_ACT = const(0x08) #0x20 = 32, 32 * 62.5mg = 2g 
+REG_FIFO_MODE = const(0x38) #Register controlling FIFO modes
+FIFO_MODE = const(0x80) #Sets FIFO mode to stream
+REG_INT_SOURCE = const(0x30) #Read-only register, shows which interrupts were activated. Reading this resets the interrupt states
+REG_DATA_FORMAT = const(0x31) #Used for formatting data, see pg. 26
+DATA_FORMAT = const(0b00001010) #Importantly sets the data range, has other functionalities that are unused
+G = const(9.80665)     
 
 ##################### TODO: CHANGE PIN INTERRUPT TO DEFAULT TO LOW CURRENT AND HAVE HIGH CURRENT BE INTERRUPT EVENT
 
@@ -83,7 +83,6 @@ def reg_read(spi, cs, reg, nbytes=1):
 
 #Ensures SCK is high
 reg_read(spi, cs, REG_DEVID)
-
 
 #Read device ID to make sure that we can communicate with the ADXL343
 def AccTest():
@@ -156,17 +155,7 @@ def FastStream(): #Optimized for speed, data likely needs further handling, used
     while i < buffer_size:
         data[bps*i:bps*i+bps] = reg_read(spi, cs, REG_DATAX0, bps)
         i = i + 1
-    
-    '''
-    prev = None
-    i = 0
-    while i < buffer_size:
-        datum = reg_read(spi, cs, REG_DATAX0, bps)
-        if prev != datum:
-            data[bps*i:bps*i+bps] = datum
-            prev = datum
-            i = i + 1
-    '''        
+           
     return data
     
 #Currently used since devices seem calibrated just fine for now
