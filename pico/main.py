@@ -1,14 +1,10 @@
 ####################################### Main Code Loop ########################################
-
-import communication as comm
+from machine import mem32, lightsleep, reset, Pin
 import accelerometer as acc
 import storage as stor
-import analysis as anal
-import machine
-import time
-import os
-import sys
-import gc
+import communication as comm
+from time import sleep
+from os import listdir
 
 #Functions:
 def ISR(pin): #Handles the interrupt
@@ -21,16 +17,16 @@ def Strike(): #Main function that collects, stores, and sends the strike data
         
         name = stor.CreateBin(data) #returns name of the newly made file
         del data
-
+        
         name = comm.SendData(name) #Sends data to Github repository, returns new name of file
         
         nfiles = 0 #Number of files, used to keep track of how many were successfully sent
-        if name not in os.listdir():
+        if name not in listdir():
             nfiles = nfiles + 1
         del name
         
         #Checks to see if there exist past strikes that weren't sent
-        files = os.listdir()
+        files = listdir()
         temp = []
         for i in range(0,len(files)):
             if files[i][-4:] == ".bin":
@@ -47,21 +43,21 @@ def Strike(): #Main function that collects, stores, and sends the strike data
             if name.index(".") - name.index("_",2) < 10: #Checks whether we already gave the file a timestamp. TODO: Add extra flag to indicate that file had no timestamp originally
                 state = True
             comm.SendData(name,gettime=state)
-            if name in os.listdir(): #Checks whether we actually sent the file, if still in os then decriment nfiles
+            if name in listdir(): #Checks whether we actually sent the file, if still in os then decriment nfiles
                 nfiles = nfiles - 1
         del files
 
-        stor.LogError(f'{nfiles} Strike(s) successfully logged and sent!\n',reset=False)
+        stor.Log(f'{nfiles} Strike(s) successfully logged and sent!\n')
         del nfiles
         
         #For some reason this doesn't even seem to do anything?
         #I'll keep it on for now though, just in case...
         comm.Disconnect()
         
-        
     except Exception as err:
         print(err)
-        stor.LogError(f'Main loop failed at unspecific point. Error message:\n{err}\n')
+        stor.Log(f'Main loop failed at unspecific point. Error message:\n{err}\n')
+        reset()
 
 def Sleep():
     global sleep_flag
@@ -82,7 +78,7 @@ def Sleep():
     REG_DORMANT_WAKE_INT =  0x40028000 + 0x2e0 #User bank address plus offset
     DORMANT_WAKE_INT = 0b1 << 19 #bit 19 turns on GPIO20 as a dormant interrupt when rising
     
-    machine.mem32[REG_DORMANT_WAKE_INT] = DORMANT_WAKE_INT #Fixes bug present in current micropython code
+    mem32[REG_DORMANT_WAKE_INT] = DORMANT_WAKE_INT #Fixes bug present in current micropython code
     
     #We want to put RAM into sleep mode (data saved but can't be accessed) to reduce power consumption further.
     #To do this first we need to set up our interrupt as a wake-up condition, or else when going out of
@@ -93,35 +89,31 @@ def Sleep():
     REG_PWRUP0_OFFSET = 0x8c #Register for configuring a wake-up event
     PWRUP0 = 0b1111010100 #Sets a wake-up condition on a rising edge on GPIO 20
     
-    machine.mem32[REG_POWMAN_BASE + REG_PWRUP0_OFFSET] = PWRUP0 | POWMAN_PASSWORD #Writes the change
+    mem32[REG_POWMAN_BASE + REG_PWRUP0_OFFSET] = PWRUP0 | POWMAN_PASSWORD #Writes the change
     
     REG_STATE_OFFSET = 0x38 #Controls the power state of the 4 power domains: SWCORE, XIP, SRAM0, and SRAM1
     STATE = 0b1111 << 4 #Turns off SRAM0 and SRAM1 and XIP and SWCORE
     
-    machine.mem32[REG_POWMAN_BASE + REG_STATE_OFFSET] = STATE | POWMAN_PASSWORD #Writes the change
+    mem32[REG_POWMAN_BASE + REG_STATE_OFFSET] = STATE | POWMAN_PASSWORD #Writes the change
     
     #Finally reset the interrupt and go to dormant mode
     acc.ResetIntrState()
-    machine.lightsleep()
-    machine.reset()
-    
-    sleep_flag = False #Occurs after sleep is over
-    #Might never get called though, but doesn't matter since at restart we set the flag to false anyways
+    lightsleep()
+    reset() #Might not be called in the first place
       
 
 #Initialization:
 sleep_flag = False #Global variable used to check if currently attempting to sleep
 
-acc.AccTest() #Tests accelerometer can be communicated with
 acc.ReadStateOn() #Turns on data reading
 acc.IntrStateOn() #Turns on interrupts
-acc.intr.irq(trigger=machine.Pin.IRQ_RISING,handler=ISR) #Create interrupt
+acc.intr.irq(trigger=Pin.IRQ_RISING,handler=ISR) #Create interrupt
 
-if machine.Pin(20).value(): #Checks to see if a strike occured
+if Pin(20).value(): #Checks to see if a strike occured
     Strike()
     acc.ResetIntrState()
-    machine.reset()
-else: #This is first time device is being run
-    time.sleep(5) #Gives time for user to exit main.py if attempting to access code
-    
+    reset()
+else: #This is first time device is being run or right after a strike
+    sleep(5) #Gives time for user to exit main.py if attempting to access code
+stor.Log("Sleep!")
 Sleep()

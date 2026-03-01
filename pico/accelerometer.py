@@ -1,9 +1,8 @@
 ####################################### Acceleromter Code #####################################
-import machine
-import time
-import ustruct
+from machine import Pin, SPI, reset
+#The following imports are only needed for test functions:
+from ustruct import unpack_from
 import config
-import gc
 import storage as stor
 
 #Documentation: https://www.analog.com/media/en/technical-documentation/data-sheets/adxl343.pdf
@@ -35,17 +34,17 @@ G = 9.80665
 ##################### TODO: CHANGE PIN INTERRUPT TO DEFAULT TO LOW CURRENT AND HAVE HIGH CURRENT BE INTERRUPT EVENT
 
 # Assign pins and create SPI instance
-cs = machine.Pin(17, machine.Pin.OUT)
-intr = machine.Pin(20, machine.Pin.IN) #interrupt
-spi = machine.SPI(0,
+cs = Pin(17, Pin.OUT)
+intr = Pin(20, Pin.IN) #interrupt
+spi = SPI(0,
                   baudrate=2000000, #see doc pg. 13 for info on appropriate ranges 
                   polarity=1, #requirement, see doc pg. 
                   phase=1, #requirement, see doc pg.
                   bits=8,
-                  firstbit=machine.SPI.MSB,
-                  sck=machine.Pin(18), 
-                  mosi=machine.Pin(19), 
-                  miso=machine.Pin(16))
+                  firstbit=SPI.MSB,
+                  sck=Pin(18), 
+                  mosi=Pin(19), 
+                  miso=Pin(16))
 
 #CS pin needs to be high voltage at start, see doc pg.
 cs.value(1)
@@ -90,7 +89,8 @@ reg_read(spi, cs, REG_DEVID)
 def AccTest():
     data = reg_read(spi, cs, REG_DEVID)
     if (data != bytearray((DEVID,))):
-        stor.LogError("Failed to communicate with accelerometer. Please ensure your cables are connected to the correct pins!\n")
+        stor.Log("Failed to communicate with accelerometer. Please ensure your cables are connected to the correct pins!\n")
+        reset()
 
 def ReadStateOff():
     PowerControl = reg_read(spi, cs, REG_POWER_CTL) #Obtain current Power Control setting
@@ -119,15 +119,15 @@ def IntrStateOn():
 def ResetIntrState():
     reg_read(spi, cs, REG_INT_SOURCE)
     
-def Stream(Samples=1,Calibrate=True): #Have it check to see if everything is initialized, instead of doing some prior and some in the function!!
-    ReadState(1)
+#Test function to see the current data stream
+def Stream(Samples=1,Calibrate=True):
     data = []
     prev = [0,0,0]
     i = 0
     while i < Samples:
         cur = reg_read(spi, cs, REG_DATAX0, 6) #Get data
         #Format data
-        curXYZ = ustruct.unpack_from("<3h", cur)
+        curXYZ = unpack_from("<3h", cur)
         
         
         if curXYZ != prev: #Check if reading same sample
@@ -169,6 +169,8 @@ def FastStream(): #Optimized for speed, data likely needs further handling, used
     '''        
     return data
     
+#Currently used since devices seem calibrated just fine for now
+#TODO: Consider deleting in future or reworking
 def Calibrate():
     axis = int(input("Choose an axis for calibration: \n X = 0 \n Y = 1 \n Z = 2 \n"))
     input("Please stabilize the device to have the + side face UPWARDS. Press ENTER to continue") #work on wording!!!
@@ -188,7 +190,6 @@ def Calibrate():
     verboseAxis = ("X","Y","Z")
     config.SaveConfig("Offset"+verboseAxis[axis],Offset)
     config.SaveConfig("Scale"+verboseAxis[axis],Scale)
-    print("Calibration completed! Resetting system in 3 seconds")
-    time.sleep(3)
-    machine.soft_reset()
+    print("Calibration completed!")
+    reset()
 

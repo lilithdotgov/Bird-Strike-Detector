@@ -1,10 +1,10 @@
 ####################################### Configuration Code ####################################
-import json
+from json import load, dump
 import communication as comm
-import ubinascii
+from ubinascii import hexlify
 
 with open("config.json","r") as RFile:
-    config = json.load(RFile)
+    config = load(RFile)
     
 MicroNum = config["MicroNum"] #Unique number for each device for easy marking
 OffsetX = config["OffsetX"]
@@ -30,11 +30,11 @@ def SaveConfig(ObjectName,Value,Index=-1):
     else:
         config[ObjectName][Index] = Value
     with open("config.json","w") as WFile:
-        json.dump(config,WFile)
+        dump(config,WFile)
 
 def Default(MicroNum_=0):
     comm.wlan.active(True)
-    mac = ubinascii.hexlify(comm.wlan.config('mac'),':').decode()
+    mac = hexlify(comm.wlan.config('mac'),':').decode()
     SaveConfig("mac",mac)
     print(mac)
     comm.Disconnect()

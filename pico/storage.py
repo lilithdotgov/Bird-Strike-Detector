@@ -1,27 +1,15 @@
 ################################ Internal Data Management Code ################################
 import config
-import random
-import ustruct
-import machine
-import os
+from random import randint
+from ustruct import pack
+from machine import reset
+from os import remove, rename
 
 def NameGen(): #Generate unique name for file
     
-    rng = random.randint(10000,99999)
+    rng = randint(10000,99999)
     mac = config.mac.replace(":","-")
     name = f'{config.MicroNum}_{mac}_{rng}.bin' 
-    
-    '''
-    files = os.listdir()
-    temp = []
-    for i in range(0,len(files)):
-        if files[i][-4:] == ".bin":
-            temp.append(files[i])
-    files = temp
-    del temp
-    name = str(len(files))
-    name = f'{name}.bin'
-    '''
     
     return name
 
@@ -34,7 +22,7 @@ def CreateBin(data): #Creates binary file of data. First 24 bytes are calibratio
         #creates prepend to data containing accelerometer calibration
         #first scale with order of XYZ then offset with order of XYZ
         #ustruct.pack('6f',value) to turn to 4 byte hex, then ustruct.unpack('6f',value) to return to float
-        prepend = bytearray(ustruct.pack('6f',config.ScaleX,config.ScaleY,config.ScaleZ,config.OffsetX,config.OffsetY,config.OffsetZ)) 
+        prepend = bytearray(pack('6f',config.ScaleX,config.ScaleY,config.ScaleZ,config.OffsetX,config.OffsetY,config.OffsetZ)) 
         
         
         try:
@@ -52,25 +40,22 @@ def CreateBin(data): #Creates binary file of data. First 24 bytes are calibratio
      
 def DeleteFile(FileName):
     try:
-        os.remove(FileName)
+        remove(FileName)
         print(f'{FileName} deleted successfully')
     except OSError as err:
-        LogError(f'Failed to modify file. Error message:\n{err}\n')
+        Log(f'Failed to modify file. Error message:\n{err}\n')
+        reset()
      
 def RenameFile(FileName,NewName):
     try:
-        os.rename(FileName,NewName)
+        rename(FileName,NewName)
         print(f'{FileName} changed to {NewName} successfully')
     except OSError as err:
-        LogError(f'Failed to modify file. Error message:\n{err}\n')
+        Log(f'Failed to modify file. Error message:\n{err}\n')
+        reset()
     
-#TODO: Make this less awful, dear god this implementation sucks!
-#Okay, I improved it but it may still need further work...
-def LogError(msg="",reset=True): 
-    print(msg)
+#Logs a message in log.txt for debugging purposes
+def Log(msg=""): 
     f = open("log.txt","a+")
     f.write(msg)
     f.close()
-
-    if reset == True:
-        machine.reset()

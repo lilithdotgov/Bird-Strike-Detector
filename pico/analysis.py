@@ -1,6 +1,8 @@
 ####################################### Analysis Code #########################################
 
 #function removes repeats of data caused by reading data registers faster than they are updated
+#This functionality has since been depreciated and should be reworked in the future if needed
+#As it stands, this entire module is currently unused
 def StripData(data,bps=6): #bps = bytes per sample
     prev = b'0x00'
     new_data = bytearray(0)
