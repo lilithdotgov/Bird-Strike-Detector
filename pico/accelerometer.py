@@ -31,8 +31,6 @@ REG_DATA_FORMAT = const(0x31) #Used for formatting data, see pg. 26
 DATA_FORMAT = const(0b00001010) #Importantly sets the data range, has other functionalities that are unused
 G = const(9.80665)     
 
-##################### TODO: CHANGE PIN INTERRUPT TO DEFAULT TO LOW CURRENT AND HAVE HIGH CURRENT BE INTERRUPT EVENT
-
 # Assign pins and create SPI instance
 cs = Pin(17, Pin.OUT)
 intr = Pin(20, Pin.IN) #interrupt

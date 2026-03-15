@@ -9,6 +9,12 @@ from binascii import b2a_base64
 from gc import collect
 from machine import RTC, reset
 
+class ConnectionFailure(Exception):
+    """Raised when device fails to connect to internet"""
+    def __str__(self):
+        return "Failed to connect to network"
+
+#Initialize some WLAN elements
 sta_if = WLAN(WLAN.IF_STA)
 ap_if = WLAN(WLAN.IF_AP)
 wlan = WLAN(STA_IF)
@@ -30,8 +36,7 @@ def Connect(): #Make new error checker later
             failures = failures + 1
             
             if failures > config.ComFailVal:
-                stor.Log("Failed to connect to network. Please recheck credentials!\n")
-                reset()
+                raise ConnectionFailure
            
         print("Connected!")
 

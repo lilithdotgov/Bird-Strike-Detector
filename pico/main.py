@@ -62,8 +62,8 @@ def Strike(): #Looks for strike logs in storage and sends them
         comm.Disconnect()
         
     except Exception as err:
-        print(err)
         stor.Log(f'Main loop failed at unspecific point. Error message:\n{err}\n')
+        acc.ResetIntrState()
         reset()
 
 def Sleep():
