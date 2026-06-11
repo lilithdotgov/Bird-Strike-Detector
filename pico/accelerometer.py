@@ -19,7 +19,7 @@ REG_DATAX0 = const(0x32) #0x32 to 0x37 contain the data for each axis, each is 2
 REG_INT_ENABLE = const(0x2E) #Interrupt Enable Register
 INT_ENABLE = const(0x10) #Enables Activity mode
 REG_ACT_CTL = const(0x27) #Enables which axis to be monitored for the interrupt modes. Plus an unused bonus feature, see doc pg. 23
-ACT_CTL = const(0b00100000) #Selects which axis to turn on for the interrupt. See doc pg. 23
+ACT_CTL = const(0b00010000) #Selects which axis to turn on for the interrupt. See doc pg. 23
 REG_INT_MAP = const(0x2F) #Chooses which pin(s) to use for interrupts
 INT_MAP = const(0xEF) #Sets activity mode interrupt to pin INT1
 REG_THRESH_ACT = const(0x24) #Sets threshold for interrupt to occur. Single unsigned byte. threshold = 62.5mg * THRESH_ACT.

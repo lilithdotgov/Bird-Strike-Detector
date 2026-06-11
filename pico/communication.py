@@ -11,8 +11,11 @@ from machine import RTC, reset
 
 class ConnectionFailure(Exception):
     """Raised when device fails to connect to internet"""
+    def __init__(self,issue="Unspecified"):
+        self.issue = issue
+    
     def __str__(self):
-        return "Failed to connect to network"
+        return f'Device failed to connect to network, Issue: {self.issue}'
 
 #Initialize some WLAN elements
 sta_if = WLAN(WLAN.IF_STA)
@@ -20,6 +23,9 @@ ap_if = WLAN(WLAN.IF_AP)
 wlan = WLAN(STA_IF)
 
 def Connect(): #Make new error checker later
+    #Rather insane implementation, meant to match index with status ID, including negative ID's. help(network) to see them all
+    status = ["STAT_IDLE","STAT_CONNECTING",None,"STAT_GOT_IP","STAT_WRONG_PASSWORD","STAT_NO_AP_FOUND","STAT_CONNECT_FAIL"]
+    
     if wlan.isconnected() == True:
         print("Already connected!")
         
@@ -31,12 +37,12 @@ def Connect(): #Make new error checker later
         failures = 0
         while wlan.isconnected() == False:
             sleep(5)
-            info = wlan.status()
-            print(f'Connecting... Status = {info}')
+            ID = wlan.status()
+            print(f'Connecting... Status = {status[ID]}')
             failures = failures + 1
             
             if failures > config.ComFailVal:
-                raise ConnectionFailure
+                raise ConnectionFailure(status[ID])
            
         print("Connected!")
 
