@@ -81,7 +81,7 @@ def SendData(FileName,gettime=True):
         for i in range(0,config.ComFailVal): #TODO: maybe make while loop, for is kinda messy here
             Connect()
             
-            #TODO: Delete later
+            #TODO: Update to modern convention
             f = open("log.txt","a+") 
             f.write(f'Connection = {wlan.isconnected()}. NTP attempt # = {i}\n')
             f.close()
@@ -94,10 +94,8 @@ def SendData(FileName,gettime=True):
                 FileName = f'{FileName[:-14]}{UTC}.bin'
                 break
             except OSError as err:
-                if i == config.ComFailVal - 1: #Checks if enough failures occured, exists process if so
-                    stor.Log(f'Failed to get NTP datetime. Using Crystal Oscillator instead. Error message:\n{err}\n')
-                    #We don't reset since error may be on NTP side rather than our own
-                    break
+                if i > config.ComFailVal: #Checks if enough failures occured, exists process if so
+                    raise ConnectionFailure(f'Failed to get NTP datetime. Using Crystal Oscillator instead. Error message:\n{err}\n')
                 sleep(5)    
 
     ### PATH PARAMETERS ###
