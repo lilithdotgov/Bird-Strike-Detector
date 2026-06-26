@@ -82,7 +82,7 @@ def Sleep():
     
     #WORK ON THIS!!!
     REG_DORMANT_WAKE_INT =  0x40028000 + 0x2e0 #User bank address plus offset
-    DORMANT_WAKE_INT = 0b1 << 19 #bit 19 turns on GPIO20 as a dormant interrupt when rising
+    DORMANT_WAKE_INT = 0b1 << 17 #bit 17 turns on GPIO20 as a dormant interrupt when Level High
     
     mem32[REG_DORMANT_WAKE_INT] = DORMANT_WAKE_INT #Fixes bug present in current micropython code
     
@@ -93,8 +93,7 @@ def Sleep():
     POWMAN_PASSWORD = 0x5AFE << 16 #Offsets from 0x0 to 0xAC require this password be written to the top 16 bits 
     
     REG_PWRUP0_OFFSET = 0x8c #Register for configuring a wake-up event
-    PWRUP0 = 0b1111010100 #Sets a wake-up condition on High Level on GPIO 20
-    #Likewise, 0b1111010100 Sets a wake-up condition on a Rising Edge on GPIO 20
+    PWRUP0 = 0b1011010100 #Sets a wake-up condition on High Level on GPIO 20
     
     mem32[REG_POWMAN_BASE + REG_PWRUP0_OFFSET] = PWRUP0 | POWMAN_PASSWORD #Writes the change
     
