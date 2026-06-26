@@ -32,7 +32,7 @@ DATA_FORMAT = const(0b00001010) #Importantly sets the data range, has other func
 G = const(9.80665)     
 
 # Assign pins and create SPI instance
-cs = Pin(17, Pin.OUT)
+cs = Pin(17, Pin.OUT, Pin.PULL_UP, value=1) 
 intr = Pin(20, Pin.IN) #interrupt
 spi = SPI(0,
                   baudrate=2000000, #see doc pg. 13 for info on appropriate ranges 
@@ -45,7 +45,6 @@ spi = SPI(0,
                   miso=Pin(16))
 
 #CS pin needs to be high voltage at start, see doc pg.
-cs.value(1)
 #SCK also needs to idle at high, can be done via a useless read
 #This can be found below the read function
 
@@ -79,10 +78,11 @@ def reg_read(spi, cs, reg, nbytes=1):
     
     return data
 
+#TODO: Ensure this is truly the pragmatic way of doing this
 #Ensures SCK is high
 reg_read(spi, cs, REG_DEVID)
 
-#Read device ID to make sure that we can communicate with the ADXL343
+#Read device ID to make sure that we can communicate with the ADXL343, also ensures SCK is high
 def AccTest():
     data = reg_read(spi, cs, REG_DEVID)
     if (data != bytearray((DEVID,))):

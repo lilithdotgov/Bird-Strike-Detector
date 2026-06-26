@@ -72,7 +72,7 @@ def SendData(FileName,gettime=True):
         "User-Agent": f'{config.GithubAcc}'}#,
         #"Connection": "close"}
 
-    if gettime == True:
+    if gettime == True: #TODO: Properly incorporate in loop to reset if fail to get time, and skip NTP query if we have NTP
         #Assign a time before attempting to get a more accurate one
         UTC = time()
         stor.RenameFile(FileName,f'{FileName[:-9]}{UTC}.bin') #Updates file name with timestamp
