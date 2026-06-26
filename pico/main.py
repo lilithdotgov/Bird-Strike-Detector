@@ -4,9 +4,8 @@
 #looking awful.
 #TODO: see if there's a nicer way of implementing this
 
-
 import accelerometer as acc
-from machine import mem32, lightsleep, reset, Pin
+from machine import mem32, lightsleep, deepsleep, reset, Pin
 strike_flag = False
 if Pin(20).value(): #Checks to see if a strike occured
         data = acc.FastStream() #Gathers data
@@ -94,7 +93,8 @@ def Sleep():
     POWMAN_PASSWORD = 0x5AFE << 16 #Offsets from 0x0 to 0xAC require this password be written to the top 16 bits 
     
     REG_PWRUP0_OFFSET = 0x8c #Register for configuring a wake-up event
-    PWRUP0 = 0b1111010100 #Sets a wake-up condition on a rising edge on GPIO 20
+    PWRUP0 = 0b1111010100 #Sets a wake-up condition on High Level on GPIO 20
+    #Likewise, 0b1111010100 Sets a wake-up condition on a Rising Edge on GPIO 20
     
     mem32[REG_POWMAN_BASE + REG_PWRUP0_OFFSET] = PWRUP0 | POWMAN_PASSWORD #Writes the change
     
@@ -105,8 +105,8 @@ def Sleep():
     
     #Finally reset the interrupt and go to dormant mode
     acc.ResetIntrState()
-    lightsleep()
-    reset() #Might not be called in the first place
+    deepsleep() #Current uPython implementation for RP2 has deepsleep() call lightsleep() then reset
+    #Keep an eye on this for future releases which may add further functionality
       
 
 #Initialization:
