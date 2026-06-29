@@ -21,11 +21,6 @@ import storage as stor #Import incase this wasn't a strike
 import communication as comm
 from time import sleep
 from os import listdir
-
-#Functions:
-def ISR(pin): #Handles the interrupt
-    if sleep_flag:
-        acc.ResetIntrState() #Reset interrupt state to allow for future interrupts
         
 def Strike(): #Looks for strike logs in storage and sends them
     try:
@@ -66,8 +61,7 @@ def Strike(): #Looks for strike logs in storage and sends them
         reset()
 
 def Sleep():
-    global sleep_flag
-    sleep_flag = True 
+    acc.ResetIntrState()
     
     #There is a bug present in the current micropython port of the deep/lightsleep function to the rp2
     #in which the system fails to wake up after recieving an interrupt. You can see this via the code
@@ -109,11 +103,8 @@ def Sleep():
       
 
 #Initialization:
-sleep_flag = False #Global variable used to check if currently attempting to sleep
-
 acc.ReadStateOn() #Turns on data reading
 acc.IntrStateOn() #Turns on interrupts
-acc.intr.irq(trigger=Pin.IRQ_RISING,handler=ISR) #Create interrupt
 
 if strike_flag: #Checks to see if a strike occured
     Strike()
