@@ -35,13 +35,10 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(BWC BWC.c )
+add_executable(BWC BWC.c accelerometer.c communication.c)
 
 pico_set_program_name(BWC "BWC")
 pico_set_program_version(BWC "0.1")
-
-# Generate PIO header
-pico_generate_pio_header(BWC ${CMAKE_CURRENT_LIST_DIR}/blink.pio)
 
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(BWC 0)

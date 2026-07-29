@@ -1,84 +1,56 @@
 #include <stdio.h>
+#include <string.h>
 #include "pico/stdlib.h"
 #include "hardware/spi.h"
-#include "hardware/pio.h"
-#include "pico/cyw43_arch.h"
+#include "accelerometer.h"
 
-// SPI Defines
-// We are going to use SPI 0, and allocate it to the following GPIO pins
-// Pins can be changed, see the GPIO function select table in the datasheet for information on GPIO assignments
-#define SPI_PORT spi0
-#define PIN_MISO 16
-#define PIN_CS   17
-#define PIN_SCK  18
-#define PIN_MOSI 19
+uint8_t data[STRIKE_SAMPLES * BPS];
 
-#include "blink.pio.h"
-
-void blink_pin_forever(PIO pio, uint sm, uint offset, uint pin, uint freq) {
-    blink_program_init(pio, sm, offset, pin);
-    pio_sm_set_enabled(pio, sm, true);
-
-    printf("Blinking pin %d at %d Hz\n", pin, freq);
-
-    // PIO counter program takes 3 more cycles in total than we pass as
-    // input (wait for n + 1; mov; jmp)
-    pio->txf[sm] = (125000000 / (2 * freq)) - 3;
-}
-
-
-
-
-int main()
-{
+int main(){
     stdio_init_all();
 
-    // Initialise the Wi-Fi chip
-    if (cyw43_arch_init()) {
-        printf("Wi-Fi init failed\n");
-        return -1;
-    }
-
-    // SPI initialisation. This example will use SPI at 1MHz.
-    spi_init(SPI_PORT, 1000*1000);
-    gpio_set_function(PIN_MISO, GPIO_FUNC_SPI);
-    gpio_set_function(PIN_CS,   GPIO_FUNC_SIO);
-    gpio_set_function(PIN_SCK,  GPIO_FUNC_SPI);
-    gpio_set_function(PIN_MOSI, GPIO_FUNC_SPI);
+    gpio_init(PIN_INTR);
+    gpio_set_dir(PIN_INTR, GPIO_IN);
     
-    // Chip select is active-low, so we'll initialise it to a driven-high state
+    gpio_init(PIN_CS);
     gpio_set_dir(PIN_CS, GPIO_OUT);
-    gpio_put(PIN_CS, 1);
-    // For more examples of SPI use see https://github.com/raspberrypi/pico-examples/tree/master/spi
-
-    // PIO Blinking example
-    PIO pio = pio0;
-    uint offset = pio_add_program(pio, &blink_program);
-    printf("Loaded program at %d\n", offset);
+    gpio_set_pulls(PIN_CS, true, false);
+    gpio_put(PIN_CS, 1); //Must occur first before setting polarity and phase of SPI
     
-    #ifdef PICO_DEFAULT_LED_PIN
-    blink_pin_forever(pio, 0, offset, PICO_DEFAULT_LED_PIN, 3);
-    #else
-    blink_pin_forever(pio, 0, offset, 6, 3);
-    #endif
-    // For more pio examples see https://github.com/raspberrypi/pico-examples/tree/master/pio
+    spi_init(SPI_PORT, 2000000); //2Mhz baudrate, see doc pg. 13 for info on appropriate ranges 
 
-    // Enable wifi station
-    cyw43_arch_enable_sta_mode();
+    spi_set_format(SPI_PORT, 8, 1, 1, SPI_MSB_FIRST); //sets polarity and phase to 1 as required, see doc pg. 13
+    //Since pins on the board have specific SPI functions, you need not specify the role of each pin, it just works 
 
-    printf("Connecting to Wi-Fi...\n");
-    if (cyw43_arch_wifi_connect_timeout_ms("Your Wi-Fi SSID", "Your Wi-Fi Password", CYW43_AUTH_WPA2_AES_PSK, 30000)) {
-        printf("failed to connect.\n");
-        return 1;
-    } else {
-        printf("Connected.\n");
-        // Read the ip address in a human readable way
-        uint8_t *ip_address = (uint8_t*)&(cyw43_state.netif[0].ip_addr.addr);
-        printf("IP address %d.%d.%d.%d\n", ip_address[0], ip_address[1], ip_address[2], ip_address[3]);
-    }
+    gpio_set_function(PIN_MISO, GPIO_FUNC_SPI);
+    gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
+    gpio_set_function(PIN_MOSI, GPIO_FUNC_SPI);
+    //gpio_set_function(PIN_CS, GPIO_FUNC_SPI);
 
-    while (true) {
-        printf("Hello, world!\n");
+    
+
+
+    read_state_on();
+    sleep_ms(100); //ADXL343 needs ~1.4ms to turn read state on, this is overkill just for demonstration
+    
+    fetch_data(data);
+    
+    for(int i = 0; i < STRIKE_SAMPLES * BPS; i += BPS){
         sleep_ms(1000);
+        
+        // Combine LSB (data[i]) and MSB (data[i+1]), then cast to signed 16-bit integer
+        int16_t x = (int16_t)((data[i+1] << 8) | data[i]);
+        int16_t y = (int16_t)((data[i+3] << 8) | data[i+2]);
+        int16_t z = (int16_t)((data[i+5] << 8) | data[i+4]);
+        
+        printf("X: %d\t Y: %d\t Z: %d\n", x, y, z);
     }
+    
+    
+    
+    while(true){
+        sleep_ms(1000);
+        printf("Response: %d\n", reading_validation());
+    }
+
 }
