@@ -57,8 +57,13 @@ target_include_directories(BWC PRIVATE
 target_link_libraries(BWC 
         hardware_spi
         hardware_pio
+        hardware_powman
         pico_cyw43_arch_lwip_threadsafe_background
+        pico_low_power
+        pico_status_led
         )
 
 pico_add_extra_outputs(BWC)
 
+#Low Pstate setting
+pico_set_persistent_data_loc(BWC 0x20020000) # Uses SRAM0
