@@ -35,7 +35,7 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(BWC BWC.c accelerometer.c communication.c)
+add_executable(BWC BWC/BWC.c BWC/accelerometer.c BWC/communication.c)
 
 pico_set_program_name(BWC "BWC")
 pico_set_program_version(BWC "0.1")
@@ -51,6 +51,7 @@ target_link_libraries(BWC
 # Add the standard include files to the build
 target_include_directories(BWC PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/BWC
 )
 
 # Add any user requested libraries
@@ -67,3 +68,6 @@ pico_add_extra_outputs(BWC)
 
 #Low Pstate setting
 pico_set_persistent_data_loc(BWC 0x20020000) # Uses SRAM0
+
+#add_subdirectory (/path/to/pico-filesystem pfs) # Add the pico-filesystem
+#target_link_libraries(BWC flash_filesystem)

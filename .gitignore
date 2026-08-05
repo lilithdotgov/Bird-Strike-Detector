@@ -6,3 +6,6 @@ log.txt
 Flashing
 Obsolete Code
 Testing
+build
+!.vscode/*
+.clang-format

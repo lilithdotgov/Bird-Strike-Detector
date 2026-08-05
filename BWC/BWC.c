@@ -67,6 +67,18 @@ int main() {
     pstate_bitset_remove(&pstate, POWMAN_POWER_DOMAIN_XIP_CACHE);
 
     if (gpio_get(PIN_INTR)) {
+        printf("Time to send data!\n");
+        sleep_ms(2000);
+        for (int i = 0; i < STRIKE_SAMPLES * BPS; i += BPS) {
+            sleep_ms(100);
+
+            // Combine LSB (data[i]) and MSB (data[i+1]), then cast to signed 16-bit integer
+            double x = G * (double)(int16_t)((data[i + 1] << 8) | data[i]) / 256.0;
+            double y = G * (double)(int16_t)((data[i + 3] << 8) | data[i + 2]) / 256.0;
+            double z = G * (double)(int16_t)((data[i + 5] << 8) | data[i + 4]) / 256.0;
+
+            printf("X: %f\t Y: %f\t Z: %f\n", x, y, z);
+        }
         reset_intr_state();
     }
 
