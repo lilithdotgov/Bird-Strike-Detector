@@ -1,0 +1,3 @@
+[submodule "dependencies/pico-filesystem"]
+	path = dependencies/pico-filesystem
+	url = https://github.com/Memotech-Bill/pico-filesystem.git
