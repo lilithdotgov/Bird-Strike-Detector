@@ -1,2 +1,0 @@
-Any dependencies will be listed in this document and where they are from:
-Currently there are no dependencies as of writing this in 3/1/26

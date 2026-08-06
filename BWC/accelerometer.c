@@ -19,7 +19,7 @@ SCK also needs to idle at high, see doc pg. 13
 #define DEVID           0xE5       // Should recieve this default value when reading the Device ID Register (REG_DEVID)
 #define REG_POWER_CTL   0x2D       // Power Control Register, used to enable/disable data output
 #define REG_DATA_RATE   0x2C       // Rate of output data
-#define DATA_RATE       0b1101     // 0b1110 is 1600hz Data Output Rate, see doc pg. 12 for more ranges
+#define DATA_RATE       0b1101     // 0b1101 is 800hz Data Output Rate, see doc pg. 12 for more ranges
 #define REG_DATAX0      0x32       // 0x32 to 0x37 contain the data for each axis, each is 2 bytes. Order is x, y, and z
 #define REG_INT_ENABLE  0x2E       // Interrupt Enable Register
 #define INT_ENABLE      0x10       // Enables Activity mode
@@ -111,6 +111,6 @@ uint8_t reading_validation(void) { // TODO: make better
 void fetch_data(uint8_t *buffer) { // Optimized for speed, data needs further handling, used in main loop
     for (int i = 0; i < STRIKE_SAMPLES; i++, buffer += BPS) {
         reg_read(REG_DATAX0, buffer, BPS);
-        busy_wait_us(1250); // 1/(3200 hz) in us is 312.5
+        busy_wait_us(1250); // 1/(800 hz) in us is 1250
     }
 }

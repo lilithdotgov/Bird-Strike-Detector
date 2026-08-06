@@ -7,5 +7,5 @@ Flashing
 Obsolete Code
 Testing
 build
-.vscode/*
+.vscode
 .clang-format
