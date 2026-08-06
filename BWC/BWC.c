@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <string.h>
+#include <dirent.h>
 
 #include "pico/stdlib.h"
 #include "pico/low_power.h"
@@ -8,24 +8,23 @@
 #include "hardware/powman.h"
 
 #include "accelerometer.h"
-
-/*
-Notes on LEDs (specifically status_led_init):
-Initialize the status LED(s) and the resources they need before use. On some devices (e.g. Pico W, Pico 2 W) accessing
-the status LED requires talking to the WiFi chip, which requires an async_context. This method will create an
-async_context for you.
-However an application should only use a single async_context instance to talk to the WiFi chip. If the application
-already has an async context (e.g. created by cyw43_arch_init) you should use status_led_init_with_context instead and
-pass it the async_context already created by your application
-*/
+#include "storage.h"
 
 uint8_t __persistent_data(data)[STRIKE_SAMPLES * BPS];
 
 // Following is a dummy variable for debug purposes
 static uint32_t __persistent_data(run_count); // Un-Initialized static variables guarenteed to be 0
 
-void return_func(pstate_bitset_t *pstate) {
-    run_count++;
+void deepsleep(void) {
+    // Specify which domains to go to *sleep* by adding all bitflags then removing sleeping domains
+    // We want SRAM0 to be awake for persistant memory so we don't remove it
+    // XIP is more energy efficient, but unforunately it seems to be a hassle to move everything from SRAM0
+    pstate_bitset_t pstate = pstate_bitset_all();
+    pstate_bitset_remove(&pstate, POWMAN_POWER_DOMAIN_SRAM_BANK1);
+    pstate_bitset_remove(&pstate, POWMAN_POWER_DOMAIN_SWITCHED_CORE);
+    pstate_bitset_remove(&pstate, POWMAN_POWER_DOMAIN_XIP_CACHE);
+
+    low_power_pstate_until_gpio_pin_state(PIN_INTR, false, true, &pstate, NULL);
 }
 
 int main() {
@@ -49,8 +48,18 @@ int main() {
     gpio_set_function(PIN_MOSI, GPIO_FUNC_SPI);
     // gpio_set_function(PIN_CS, GPIO_FUNC_SPI);
 
-    if (gpio_get(PIN_INTR)) {
+    if (gpio_get(PIN_INTR)) { // Grab data if woken up by interrupt. TODO: Make this more robust
         fetch_data(data);
+    }
+
+    initialize_lfs(); // Initializes the filesystem, we do this last to not delay collecting samples
+
+    printf(".\n"); // Dummy printf just to give us Serial Monitor access, disable when no longer needed for testing
+    fflush(stdout);
+    sleep_ms(5000);
+
+    if (gpio_get(PIN_INTR)) { // Write data to file
+        write_file("/test.txt", data);
     }
 
     read_state_on();
@@ -59,30 +68,24 @@ int main() {
     intr_state_on();
     sleep_ms(10); // ADXL343 needs at least ~1.4ms to turn setting on
 
-    // Specify which domains to go to *sleep* by adding all bitflags then removing sleeping domains
-    // We want SRAM0 to be awake for persistant memory so we don't remove it
-    pstate_bitset_t pstate = pstate_bitset_all();
-    pstate_bitset_remove(&pstate, POWMAN_POWER_DOMAIN_SRAM_BANK1);
-    pstate_bitset_remove(&pstate, POWMAN_POWER_DOMAIN_SWITCHED_CORE);
-    pstate_bitset_remove(&pstate, POWMAN_POWER_DOMAIN_XIP_CACHE);
-
     if (gpio_get(PIN_INTR)) {
-        printf("Time to send data!\n");
-        sleep_ms(2000);
-        for (int i = 0; i < STRIKE_SAMPLES * BPS; i += BPS) {
-            sleep_ms(100);
-
-            // Combine LSB (data[i]) and MSB (data[i+1]), then cast to signed 16-bit integer
-            double x = G * (double)(int16_t)((data[i + 1] << 8) | data[i]) / 256.0;
-            double y = G * (double)(int16_t)((data[i + 3] << 8) | data[i + 2]) / 256.0;
-            double z = G * (double)(int16_t)((data[i + 5] << 8) | data[i + 4]) / 256.0;
-
-            printf("X: %f\t Y: %f\t Z: %f\n", x, y, z);
-        }
-        reset_intr_state();
+        // reset_intr_state();
     }
 
-    low_power_pstate_until_gpio_pin_state(PIN_INTR, false, true, &pstate, return_func);
+    if (!gpio_get(PIN_INTR)) {
+        // deepsleep();
+    }
+    // No code should ever run past the low power call when the if-statement is false
+
+    list_dir();
+
+    read_file("/test.txt");
+
+    for (;;) {
+        printf("End of Code!\n");
+        fflush(stdout);
+        sleep_ms(1000);
+    }
 }
 
 /*
@@ -98,16 +101,11 @@ int main() {
    */
 
 /*
-        printf("Time to send data!\n");
-        sleep_ms(2000);
-        for (int i = 0; i < STRIKE_SAMPLES * BPS; i += BPS) {
-            sleep_ms(100);
-
-            // Combine LSB (data[i]) and MSB (data[i+1]), then cast to signed 16-bit integer
-            double x = G * (double)(int16_t)((data[i + 1] << 8) | data[i]) / 256.0;
-            double y = G * (double)(int16_t)((data[i + 3] << 8) | data[i + 2]) / 256.0;
-            double z = G * (double)(int16_t)((data[i + 5] << 8) | data[i + 4]) / 256.0;
-
-            printf("X: %f\t Y: %f\t Z: %f\n", x, y, z);
-        }
+Notes on LEDs (specifically status_led_init):
+Initialize the status LED(s) and the resources they need before use. On some devices (e.g. Pico W, Pico 2 W) accessing
+the status LED requires talking to the WiFi chip, which requires an async_context. This method will create an
+async_context for you.
+However an application should only use a single async_context instance to talk to the WiFi chip. If the application
+already has an async context (e.g. created by cyw43_arch_init) you should use status_led_init_with_context instead and
+pass it the async_context already created by your application
 */
