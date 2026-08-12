@@ -60,7 +60,10 @@ target_link_libraries(BWC
         hardware_spi
         hardware_pio
         hardware_powman
-        pico_cyw43_arch_lwip_threadsafe_background
+        pico_cyw43_arch_lwip_poll
+        pico_lwip
+        pico_mbedtls
+        pico_lwip_mbedtls
         pico_low_power
         pico_status_led
         )

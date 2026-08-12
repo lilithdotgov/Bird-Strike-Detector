@@ -9,3 +9,4 @@ Testing
 build
 .vscode
 .clang-format
+BWC/secrets.h

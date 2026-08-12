@@ -1,0 +1,310 @@
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+
+#include "pico/stdlib.h"
+#include "pico/cyw43_arch.h"
+
+#include "lwip/pbuf.h"
+#include "lwip/altcp_tcp.h"
+#include "lwip/altcp_tls.h"
+#include "lwip/dns.h"
+
+#include "mbedtls/ssl.h"
+
+#include "communication.h"
+#include "secrets.h" //In the repository this is secrets_example.h, modify it and rename it for your own usage!
+
+#define TIMEOUT_MS  30000            // Default timeout of 30 seconds
+#define GITHUB_ADDR "api.github.com" // For DNS lookup and full request
+
+#ifndef GITHUB_CERT
+#define GITHUB_CERT     NULL
+#define GITHUB_CERT_LEN 0
+#endif
+
+#define JSON_BODY_FORMAT "{\"message\":\"New Strike Log\",\"committer\":{\"name\":\"no1\",\"email\":\"odysseus@fakemail.gov\"},\"content\":\"%s\"}"
+
+#define HTTP_REQUEST_FORMAT "PUT /repos/" GITHUB_ACC "/" GITHUB_REPO "/contents/%s HTTP/1.1\r\n" \
+                            "Host: " GITHUB_ADDR "\r\n"                                          \
+                            "Accept: application/vnd.github+json\r\n"                            \
+                            "Content-Type: application/json\r\n"                                 \
+                            "Content-Length: %d\r\n"                                             \
+                            "Authorization: Bearer " GITHUB_TOKEN "\r\n"                         \
+                            "X-GitHub-Api-Version: 2026-03-10\r\n"                               \
+                            "User-Agent: " GITHUB_ACC "\r\n"                                     \
+                            "Connection: close\r\n"                                              \
+                            "\r\n"                                                               \
+                            "%s"
+
+// TODO: make all the error message be sent to stderr perhaps?
+
+typedef struct TLS_CLIENT_T_ {
+    struct altcp_pcb *pcb;
+    bool complete;
+    int error;
+    char *http_request;
+    int timeout;
+} TLS_CLIENT_T;
+
+static struct altcp_tls_config *tls_config = NULL;
+
+int connect_to_wifi(void) {
+    int status;
+    if (status = cyw43_arch_init()) { // RP2 function
+        printf("Failure to initialize cyw43_arch with code: %d\n", status);
+        return status;
+    }
+
+    cyw43_arch_enable_sta_mode(); // RP2 function. Enables WiFi in station mode (client), has no error output
+    // For reference, AP is Access Point and for the role of serving, while STA is Station and for the role of being a client to an AP
+
+    printf("Connecting to WiFi...\n");
+
+    if (status = cyw43_arch_wifi_connect_timeout_ms(WIFI_SSID, WIFI_PASS, CYW43_AUTH_WPA2_AES_PSK, TIMEOUT_MS)) { // RP2 function
+        printf("Failure to connect to WiFi with code: %d\n", status);
+        return status;
+    }
+
+    return 0;
+}
+
+void disconnect_from_wifi(void) {
+    // Both are RP2 functions
+    cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA); // Unsure how much this is really needed
+    cyw43_arch_deinit();                           // Might cause some issues with repeated init/deinit, but since we are resetting it's fine?
+}
+
+int wifi_status(void) {
+    int status;
+    if (status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA)) { // RP2 function
+        printf("Not connected to WiFi with code: %d\n", status);
+        return status;
+    }
+
+    return 0;
+}
+
+static err_t tls_client_close(void *arg) {
+    TLS_CLIENT_T *state = (TLS_CLIENT_T *)arg;
+    err_t err           = ERR_OK;
+
+    state->complete = true;
+    if (state->pcb != NULL) {
+        altcp_arg(state->pcb, NULL);
+        altcp_poll(state->pcb, NULL, 0);
+        altcp_recv(state->pcb, NULL);
+        altcp_err(state->pcb, NULL);
+        err = altcp_close(state->pcb);
+        if (err != ERR_OK) {
+            printf("Failure to close PCB/TCB, calling abort with code: %d\n", err);
+            altcp_abort(state->pcb);
+            err = ERR_ABRT;
+        }
+        state->pcb = NULL;
+    }
+    return err;
+}
+
+static err_t tls_client_connected(void *arg, struct altcp_pcb *pcb, err_t err) { // This is the one that actually sends the data
+    TLS_CLIENT_T *state = (TLS_CLIENT_T *)arg;
+    if (err != ERR_OK) {
+        printf("Failure to connect with code: %d\n", err);
+        return tls_client_close(state);
+    }
+
+    printf("Sending initial request...\n");
+    err = altcp_write(state->pcb, state->http_request, strlen(state->http_request), TCP_WRITE_FLAG_COPY);
+    if (err != ERR_OK) {
+        printf("error writing data, err=%d", err);
+        return tls_client_close(state);
+    }
+
+    return ERR_OK;
+}
+
+static err_t tls_client_poll(void *arg, struct altcp_pcb *pcb) { // lwIP has timedout and needs to be closed
+    TLS_CLIENT_T *state = (TLS_CLIENT_T *)arg;
+    printf("timed out\n");
+    state->error = PICO_ERROR_TIMEOUT;
+    return tls_client_close(arg);
+}
+
+static void tls_client_err(void *arg, err_t err) { // Doesn't need to free PCB as it's handled automatically by altcp_err()
+    TLS_CLIENT_T *state = (TLS_CLIENT_T *)arg;
+    printf("tls_client_err %d\n", err);
+    if (state) {
+        state->pcb      = NULL;
+        state->complete = true;
+        state->error    = PICO_ERROR_GENERIC;
+    }
+}
+
+static err_t tls_client_recv(void *arg, struct altcp_pcb *pcb, struct pbuf *p, err_t err) {
+    TLS_CLIENT_T *state = (TLS_CLIENT_T *)arg;
+    if (!p) { // Remote has closed connection so close on our side as well
+        printf("Connection closed by Remote, closing client-side connection...\n");
+        return tls_client_close(state);
+    }
+
+    if (p->tot_len > 0) {         // Ensure the packet isn't empty
+        char buf[p->tot_len + 1]; // allocate a buffer to store the incomming packet (in full, since I think RAM can handle it)
+
+        pbuf_copy_partial(p, buf, p->tot_len, 0); // Can just handle an arbitrary pointer, unlike pbuf_copy()
+
+        buf[p->tot_len] = '\0'; // Ensure we have a string terminator as that isn't supplied
+
+        printf("\nnew data received from server:\n-----\n\n%s\n\n-----\n", buf);
+
+        // Needs to be called after user is done reading the data, must specify how many bytes were read (p->tot_len)
+        altcp_recved(pcb, p->tot_len);
+    }
+    pbuf_free(p);
+
+    return ERR_OK;
+}
+
+static void tls_client_connect_to_server_ip(const ip_addr_t *ipaddr, TLS_CLIENT_T *state) {
+    err_t err;
+    u16_t port = 443; // Port for HTTPS
+
+    printf("Connecting to GitHub...");
+
+    // altcp_connect will return instantly, it does not wait for the connection protocal to finish
+    // Instead the callback function supplied as the 4th argument is meant to handle that
+    err = altcp_connect(state->pcb, ipaddr, port, tls_client_connected);
+    if (err != ERR_OK) {
+        fprintf(stderr, "Failure connecting to GitHub with code: %d\n", err);
+        tls_client_close(state);
+    }
+}
+
+static void tls_client_dns_found(const char *hostname, const ip_addr_t *ipaddr, void *arg) {
+    if (ipaddr) {
+        printf("DNS resolving complete\n");
+        tls_client_connect_to_server_ip(ipaddr, (TLS_CLIENT_T *)arg);
+    } else {
+        printf("error resolving hostname %s\n", hostname);
+        tls_client_close(arg);
+    }
+}
+
+static bool tls_client_open(const char *hostname, void *arg) {
+    // Note:
+    // cyw43_arch_lwip_begin/end should be used around calls into lwIP to ensure correct locking.
+    // You can omit them if you are in a callback from lwIP. Note that when using pico_cyw_arch_poll
+    // these calls are a no-op and can be omitted, but it is a good practice to use them regardless
+
+    err_t err;
+    ip_addr_t server_ip;
+    TLS_CLIENT_T *state = (TLS_CLIENT_T *)arg;
+
+    cyw43_arch_lwip_begin();
+    state->pcb = altcp_tls_new(tls_config, IPADDR_TYPE_ANY); // lwIP function, creates new PCB/TCB
+    cyw43_arch_lwip_end();
+
+    if (!state->pcb) {
+        printf("Failure to create new PCB/TCB, not enough memory\n");
+        return false;
+    }
+
+    // All lwIP functions:
+    cyw43_arch_lwip_begin();
+
+    // Specifies the PCB/TCB to be passed to all other callback functions, and the TLS_CLIENT that will be passed to the callbacks
+    altcp_arg(state->pcb, state);
+
+    // Sets a callback to handle what occurs after a timeout
+    // specifically this is only when the TCP stack is idle, the timer does not count down during
+    // It does a "/1000" since the input expects seconds, and "* 2" since it actually polls at half the given interval (for some reason)
+    altcp_poll(state->pcb, tls_client_poll, ((state->timeout) / 1000) * 2);
+
+    // Sets a callback to handle new data that arrives
+    // It passes the new data via a pbuf that is sent to the callback function
+    // It will additionally pass a NULL pbuf to indicate the remote host has closed the connection
+    // tls_client_recv should return ERR_OK or ERR_ABRT to indicate it has properly freed the pbuf after closing the connection
+    altcp_recv(state->pcb, tls_client_recv);
+
+    // Sets a callback to handle what occurs after a fatal error during the TCP
+    altcp_err(state->pcb, tls_client_err);
+    cyw43_arch_lwip_end();
+
+    // SNI is needed for host to give us the proper certificate
+    // Although we never actually use it for verification ourselves, it's a required part of the TLS handshake
+    mbedtls_ssl_set_hostname(altcp_tls_context(state->pcb), hostname);
+
+    printf("resolving %s\n", hostname);
+
+    // More lwIP functions
+    cyw43_arch_lwip_begin();
+
+    // Resolves DNS query to server_ip
+    //  3rd argument is callback function
+    //  4th being the TLS_CLIENT that will be sent as an argument to the callback
+    err = dns_gethostbyname(hostname, &server_ip, tls_client_dns_found, state);
+
+    if (err == ERR_OK) { // hostname is a valid IP address string or the host name is already in the local names table
+        tls_client_connect_to_server_ip(&server_ip, state);
+    } else if (err != ERR_INPROGRESS) {
+        printf("error initiating DNS resolving, err=%d\n", err);
+        tls_client_close(state->pcb);
+    }
+
+    cyw43_arch_lwip_end();
+
+    return err == ERR_OK || err == ERR_INPROGRESS;
+}
+
+int send_data(const char *path, const char *content) {
+    // Currently doesn't spport certificate checking
+
+    tls_config = altcp_tls_create_config_client(GITHUB_CERT, GITHUB_CERT_LEN); // lwIP function, creates handle
+    assert(tls_config);
+
+    TLS_CLIENT_T *state = calloc(1, sizeof(TLS_CLIENT_T)); // calloc initializes the memory to 0
+
+    // snprintf is an insane optimization here, it prints 0 characters to no buffer
+    // butttt, it returns how many characters would've been written had it been able to write them all.
+    // That plus 1 for the string terminator gets you the length without needing to worry about memory
+    int body_len = snprintf(NULL, 0, JSON_BODY_FORMAT, content);
+    char *body   = malloc(body_len + 1);
+    if (!body) {
+        fprintf(stderr, "Failure to allocate memory for JSON Body");
+        free(state);
+        altcp_tls_free_config(tls_config);
+        return -1;
+    }
+    snprintf(body, body_len + 1, JSON_BODY_FORMAT, content); // Now write the body to the buffer
+
+    // 2. Format complete HTTP request with Content-Length header
+    int req_len         = snprintf(NULL, 0, HTTP_REQUEST_FORMAT, path, body_len, body) + 1; // Now get length of full request
+    state->http_request = malloc(req_len);
+    if (!state->http_request) {
+        fprintf(stderr, "Failure to allocate memory for HTTPS Request");
+        free(body);
+        free(state);
+        altcp_tls_free_config(tls_config);
+        return -1;
+    }
+    snprintf(state->http_request, req_len, HTTP_REQUEST_FORMAT, path, body_len, body);
+    free(body); // Done with temporary body buffer
+
+    state->timeout = TIMEOUT_MS;
+    if (!tls_client_open(GITHUB_ADDR, state)) { // Cleanup on failure
+        free(state->http_request);
+        free(state);
+        altcp_tls_free_config(tls_config);
+        return -1; // TODO: Replace with corresponding SDK Error enum
+    }
+    while (!state->complete) {
+        cyw43_arch_poll();                                          // Required in polling mode, keeps process churning
+        cyw43_arch_wait_for_work_until(make_timeout_time_ms(1000)); // Waits until 1000ms from current timestamp
+    }
+    int err = state->error;
+
+    // Cleanup and end request
+    free(state->http_request);
+    free(state);
+    altcp_tls_free_config(tls_config);
+    return err;
+}

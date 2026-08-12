@@ -9,6 +9,7 @@
 
 #include "accelerometer.h"
 #include "storage.h"
+#include "communication.h"
 
 uint8_t __persistent_data(data)[STRIKE_SAMPLES * BPS];
 
@@ -77,9 +78,17 @@ int main() {
     }
     // No code should ever run past the low power call when the if-statement is false
 
-    list_dir();
+    // list_dir();
 
-    read_file("/test.txt");
+    // read_file("/test.txt");
+
+    if (connect_to_wifi() == 0) {
+        printf("Successfully connected to Wi-Fi!\n");
+        send_data("test2", "bXkgbmV3IGZpbGUgY29udGVudHM=");
+
+        // Optional: Disconnect when done to save power
+        disconnect_from_wifi();
+    }
 
     for (;;) {
         printf("End of Code!\n");
