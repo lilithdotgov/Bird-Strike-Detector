@@ -4,16 +4,23 @@
 
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
+#include "pico/aon_timer.h"
 
 #include "lwip/pbuf.h"
 #include "lwip/altcp_tcp.h"
 #include "lwip/altcp_tls.h"
 #include "lwip/dns.h"
+#include "lwip/apps/sntp.h"
 
 #include "mbedtls/ssl.h"
 
 #include "communication.h"
 #include "secrets.h" //In the repository this is secrets_example.h, modify it and rename it for your own usage!
+
+// Note:
+// cyw43_arch_lwip_begin/end should be used around calls into lwIP to ensure correct locking.
+// You can omit them if you are in a callback from lwIP. Note that when using pico_cyw_arch_poll
+// these calls are a no-op and can be omitted, but it is a good practice to use them regardless
 
 #define TIMEOUT_MS  30000            // Default timeout of 30 seconds
 #define GITHUB_ADDR "api.github.com" // For DNS lookup and full request
@@ -47,6 +54,8 @@ typedef struct TLS_CLIENT_T_ {
     int timeout;
 } TLS_CLIENT_T;
 
+bool sntp_state = false; // Whether or not a new timestamp has been set
+
 static struct altcp_tls_config *tls_config = NULL;
 
 int connect_to_wifi(void) {
@@ -70,14 +79,15 @@ int connect_to_wifi(void) {
 }
 
 void disconnect_from_wifi(void) {
-    // Both are RP2 functions
-    cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA); // Unsure how much this is really needed
+    // All are RP2 functions
+    cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA); // Unsure how much this is really needed?
+    cyw43_arch_disable_sta_mode();                 // Apparently some routers may be mad if you don't do this?
     cyw43_arch_deinit();                           // Might cause some issues with repeated init/deinit, but since we are resetting it's fine?
 }
 
 int wifi_status(void) {
-    int status;
-    if (status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA)) { // RP2 function
+    int status = cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA);
+    if (status != CYW43_LINK_JOIN) { // RP2 function
         printf("Not connected to WiFi with code: %d\n", status);
         return status;
     }
@@ -190,11 +200,6 @@ static void tls_client_dns_found(const char *hostname, const ip_addr_t *ipaddr, 
 }
 
 static bool tls_client_open(const char *hostname, void *arg) {
-    // Note:
-    // cyw43_arch_lwip_begin/end should be used around calls into lwIP to ensure correct locking.
-    // You can omit them if you are in a callback from lwIP. Note that when using pico_cyw_arch_poll
-    // these calls are a no-op and can be omitted, but it is a good practice to use them regardless
-
     err_t err;
     ip_addr_t server_ip;
     TLS_CLIENT_T *state = (TLS_CLIENT_T *)arg;
@@ -307,4 +312,42 @@ int send_data(const char *path, const char *content) {
     free(state);
     altcp_tls_free_config(tls_config);
     return err;
+}
+
+// callback for lwIP/SNTP to set the aon_timer to UTC
+// we configure SNTP to call this function when it receives a valid NTP timestamp
+// (see lwipopts.h)
+void sntp_set_system_time_us(unsigned int sec, unsigned int us) {
+    static struct timespec ntp_ts;
+    ntp_ts.tv_sec  = sec;
+    ntp_ts.tv_nsec = us * 1000;
+
+    if (aon_timer_is_running()) { // AON already running, set to new timestamp
+        aon_timer_set_time(&ntp_ts);
+        sntp_state = true;
+        printf("Updated time!\n");
+    } else { // AON is not on yet so set starting time to the new timestamp
+        aon_timer_start(&ntp_ts);
+        sntp_state = true;
+        printf("Set time via SNTP!\n");
+    }
+}
+
+void set_time(void) {                        // Function user calls to setup the AON time via SNTP
+    sntp_setoperatingmode(SNTP_OPMODE_POLL); // Needs to be called before sntp_init()
+    sntp_init();
+
+    while (!sntp_state) {
+        cyw43_arch_poll();                                          // Required in polling mode, keeps process churning
+        cyw43_arch_wait_for_work_until(make_timeout_time_ms(1000)); // Waits until 1000ms from current timestamp
+    }
+
+    sntp_stop();
+}
+
+uint64_t get_time(void) { // Function user calls to get back
+    struct timespec current_time;
+
+    aon_timer_get_time(&current_time);
+    return current_time.tv_sec;
 }

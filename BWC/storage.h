@@ -6,4 +6,8 @@ void write_file(char *name, uint8_t *data);
 
 void read_file(char *name);
 
-void list_dir(void);
+void print_dir(void);
+
+// char **list_dir(void);
+
+// char *generate_temp_bin_name(void);

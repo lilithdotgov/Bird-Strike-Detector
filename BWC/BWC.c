@@ -1,19 +1,21 @@
 #include <stdio.h>
 #include <dirent.h>
+#include <time.h>
 
 #include "pico/stdlib.h"
 #include "pico/low_power.h"
-#include "pico/status_led.h"
 #include "hardware/spi.h"
 #include "hardware/powman.h"
+// #include "pico/status_led.h"
 
 #include "accelerometer.h"
 #include "storage.h"
 #include "communication.h"
 
-uint8_t __persistent_data(data)[STRIKE_SAMPLES * BPS];
+#define MAX_DEBOUNCE_WAIT_MS 60000
 
-// Following is a dummy variable for debug purposes
+uint8_t __persistent_data(data)[STRIKE_SAMPLES * BPS]; // Where strike data is to be stored in ram
+
 static uint32_t __persistent_data(run_count); // Un-Initialized static variables guarenteed to be 0
 
 void deepsleep(void) {
@@ -29,6 +31,7 @@ void deepsleep(void) {
 }
 
 int main() {
+    // Initialize as much as is strictly necessary to gather data
     stdio_init_all();
 
     gpio_init(PIN_INTR);
@@ -47,54 +50,74 @@ int main() {
     gpio_set_function(PIN_MISO, GPIO_FUNC_SPI);
     gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
     gpio_set_function(PIN_MOSI, GPIO_FUNC_SPI);
-    // gpio_set_function(PIN_CS, GPIO_FUNC_SPI);
-
+    /*
+    bool strike_flag;
     if (gpio_get(PIN_INTR)) { // Grab data if woken up by interrupt. TODO: Make this more robust
         fetch_data(data);
+        strike_flag = true;
+    } else {           // Not a strike, booting up for first time, run usual set up
+        printf(".\n"); // Dummy printf just to give us Serial Monitor access
+        fflush(stdout);
+        sleep_ms(5000); // Wait 5 seconds to let user open Serial Monitor
+
+        strike_flag = false;
+
+        read_state_on();
+        sleep_ms(10); // ADXL343 needs at least ~1.4ms to turn setting on
+
+        intr_state_on();
+        sleep_ms(10); // ADXL343 needs at least ~1.4ms to turn setting on
     }
 
     initialize_lfs(); // Initializes the filesystem, we do this last to not delay collecting samples
 
-    printf(".\n"); // Dummy printf just to give us Serial Monitor access, disable when no longer needed for testing
-    fflush(stdout);
-    sleep_ms(5000);
-
-    if (gpio_get(PIN_INTR)) { // Write data to file
-        write_file("/test.txt", data);
+    if (strike_flag) { // Write data to file
+        write_binary_file(generate_temp_bin_name(), data);
     }
 
-    read_state_on();
-    sleep_ms(10); // ADXL343 needs at least ~1.4ms to turn setting on
+    // Regardless of strike or not, check if there are any unsent strikes and attempt to send them
+    char **files;
+    if (files = find_in_dir(".bin")) {
+        for (int i = 0; (i < CONNECT_RETRY) && !wifi_status; i++) { // Attempt multiple times to conect to WiFi
+            printf("Wifi connection attempt #%d\n", i);
+            connect_to_wifi();
+        }
 
-    intr_state_on();
-    sleep_ms(10); // ADXL343 needs at least ~1.4ms to turn setting on
+        if (wifi_status()) {
+            printf("Successfully connected to Wi-Fi!\n");
 
-    if (gpio_get(PIN_INTR)) {
-        // reset_intr_state();
-    }
+            for (int i = 0; files[i] != NULL; i++) {
+            }
+        }
 
-    if (!gpio_get(PIN_INTR)) {
-        // deepsleep();
-    }
-    // No code should ever run past the low power call when the if-statement is false
-
-    // list_dir();
-
-    // read_file("/test.txt");
-
-    if (connect_to_wifi() == 0) {
-        printf("Successfully connected to Wi-Fi!\n");
-        send_data("test2", "bXkgbmV3IGZpbGUgY29udGVudHM=");
-
-        // Optional: Disconnect when done to save power
         disconnect_from_wifi();
     }
 
-    for (;;) {
-        printf("End of Code!\n");
-        fflush(stdout);
+
+    for (int i = 1; gpio_get(PIN_INTR); i++) { // Do not go to sleep unless we have had at least a whole second without an interrupt
+        reset_intr_state();
+        sleep_ms( ((i * 1000) < MAX_DEBOUNCE_WAIT_MS) ? (i * 1000) : MAX_DEBOUNCE_WAIT_MS );
+    }
+    reset_intr_state(); // One last reset just in-case
+    deepsleep();
+
+    for (;;) { // This code should never run
+        printf("End of Code! You should not see this!\n");
         sleep_ms(1000);
     }
+
+    */
+
+    printf(".\n"); // Dummy printf just to give us Serial Monitor access
+    fflush(stdout);
+    sleep_ms(5000); // Wait 5 seconds to let user open Serial Monitor
+
+    connect_to_wifi();
+    set_time();
+    disconnect_from_wifi();
+
+    printf("Time = %lld\n", get_time());
+    fflush(stdout);
 }
 
 /*

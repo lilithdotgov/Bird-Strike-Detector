@@ -64,8 +64,11 @@ target_link_libraries(BWC
         pico_lwip
         pico_mbedtls
         pico_lwip_mbedtls
+        pico_lwip_sntp
         pico_low_power
         pico_status_led
+        pico_rand
+        pico_aon_timer
         )
 
 pico_add_extra_outputs(BWC)

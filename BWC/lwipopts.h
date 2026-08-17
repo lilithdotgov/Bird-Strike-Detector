@@ -88,3 +88,26 @@
 #define MEMP_NUM_TCP_PCB         2
 #define MEMP_NUM_ALTCP_PCB       2
 #define MEMP_NUM_ALTCP_TLS_STATE 1
+
+#define MEMP_NUM_SYS_TIMEOUT             (LWIP_NUM_SYS_TIMEOUT_INTERNAL + 1) // For some reason needed?
+#define SNTP_MAX_SERVERS                 LWIP_DHCP_MAX_NTP_SERVERS           // Default setting of 1
+#define SNTP_GET_SERVERS_FROM_DHCP       LWIP_DHCP_GET_NTP_SRV               // Default setting of 0
+#define SNTP_SERVER_DNS                  1                                   // Allows setting of server via DNS (via SNTP_SERVER_ADDRESS)
+#define SNTP_SERVER_ADDRESS              "pool.ntp.org"                      // See website for more information
+#define SNTP_PORT                        LWIP_IANA_PORT_SNTP                 // Default of 123, standard port for NTP
+#define SNTP_CHECK_RESPONSE              0                                   // Turns off sanity checks, is default
+#define SNTP_COMP_ROUNDTRIP              0                                   // Turns off roundtrip calculation
+#define SNTP_STARTUP_DELAY               0                                   // Disables start-up delay
+#define SNTP_RECV_TIMEOUT                15000                               // How long to wait before retrying request, default is 15 seconds and specification says to not go below that
+#define SNTP_RETRY_TIMEOUT_EXP           1                                   // RFC standard defines it best to increase the retry time for each retry, this enables said feature
+#define SNTP_RETRY_TIMEOUT               SNTP_RECV_TIMEOUT                   // Default retry timeout, this is doubled each time until the SNTP_RETRY_TIMEOUT_MAX
+#define SNTP_RETRY_TIMEOUT_MAX           (SNTP_RETRY_TIMEOUT * 10)           // Default value, max that a retry can take
+#define SNTP_UPDATE_DELAY                3600000                             // How often to update timestamp, not important for our purposes, default is 1 hour
+#define SNTP_MONITOR_SERVER_REACHABILITY 1                                   // Keeps an internal register of server reachability per RFC standards
+
+//* configure SNTP to use our callback functions for setting the system time
+#define SNTP_SET_SYSTEM_TIME_US(sec, us) sntp_set_system_time_us(sec, us)
+
+//* declare our callback functions
+#include <stdint.h>
+void sntp_set_system_time_us(unsigned int sec, unsigned int us);
