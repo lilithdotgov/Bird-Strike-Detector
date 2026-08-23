@@ -28,12 +28,12 @@ SCK also needs to idle at high, see doc pg. 13
 #define REG_INT_MAP     0x2F       // Chooses which pin(s) to use for interrupts
 #define INT_MAP         0xEF       // Sets activity mode interrupt to pin INT1
 #define REG_THRESH_ACT  0x24       // Sets threshold for interrupt to occur. Single unsigned byte. threshold = 62.5mg * THRESH_ACT.
-#define THRESH_ACT      0x08       // 0x20 = 32, 32 * 62.5mg = 2g
+#define THRESH_ACT      0x08       // 0x08 = 8, 8 * 62.5mg = 0.5g
 #define REG_FIFO_MODE   0x38       // Register controlling FIFO modes
 #define FIFO_MODE       0x80       // Sets FIFO mode to stream
 #define REG_INT_SOURCE  0x30       // Read-only register, shows which interrupts were activated. Reading this resets the interrupt states
 #define REG_DATA_FORMAT 0x31       // Used for formatting data, see pg. 26
-#define DATA_FORMAT     0b00001010 // Importantly sets the data range, has other functionalities that are unused
+#define DATA_FORMAT     0b00001010 // Importantly sets it to full-res mode and the data range to 8g, has other functionalities that are unused, see pg. 26
 
 // RP2350 runs at 125MHz by default on SDK, so each CPU cycle is 8ns
 // Need at least 150ns of wait for the longest SPI action

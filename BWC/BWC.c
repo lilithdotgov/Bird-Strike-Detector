@@ -7,7 +7,8 @@
 #include "pico/low_power.h"
 #include "hardware/spi.h"
 #include "hardware/powman.h"
-// #include "pico/status_led.h"
+#include "pico/status_led.h"
+#include "pico/cyw43_arch.h" //only needed for LED
 
 #include "accelerometer.h"
 #include "storage.h"
@@ -31,6 +32,7 @@ void deepsleep(void) {
     low_power_pstate_until_gpio_pin_state(PIN_INTR, false, true, &pstate, NULL);
 }
 
+// TODO: Have a watchdog or smthn for connection attempts. Seems like it can hang...
 int main() {
     // Initialize as much as is strictly necessary to gather data
     stdio_init_all();
@@ -56,14 +58,24 @@ int main() {
     if (gpio_get(PIN_INTR) && run_count) { // Grab data if woken up by interrupt and isn't first run to ensure no floating values
         fetch_data(data);
         strike_flag = true;
-    } else {           // Not a strike, booting up for first time, run usual set up
+    } else {
         printf(".\n"); // Dummy printf just to give us Serial Monitor access
         fflush(stdout);
         sleep_ms(5000); // Wait 5 seconds to let user open Serial Monitor
+        strike_flag = false;
+    }
+
+    // If no USB host is connected (e.g., on battery power), disable USB stdout completely.
+    // This makes all printf/fflush(stdout) statements into no-ops (supposedly, check docs later...)
+    if (!stdio_usb_connected()) {
+        // stdio_set_driver_enabled(&stdio_usb, false);
+    }
+
+    if (strike_flag == false) { // Not a strike, booting up for first time, run usual set up
 
         strike_flag = false;
 
-        for (int i = 0; (i < CONNECT_RETRY) && (wifi_status() != WIFI_IS_CONNECTED); i++) { // Attempt multiple times to conect to WiFi
+        for (int i = 0; (i < CONNECT_RETRY) && (wifi_status() != WIFI_IS_CONNECTED); i++) { // Attempt multiple times to connect to WiFi
             printf("Wifi connection attempt #%d\n", i);
             fflush(stdout);
             connect_to_wifi();
@@ -119,6 +131,7 @@ int main() {
                         printf("Successfully sent file:\t%s!\n", files[i]);
                         remove(files[i]);
                     }
+                    free(state);
                     free(files[i]);
                 }
             }
@@ -146,6 +159,15 @@ int main() {
     // ANY ATTEMPTS TO CALL PRINTF WILL APPEAR AS IF THEY FAILED!!!
     // Hence all our last prints will be made before this, even if a little awkward...
     disconnect_from_wifi();
+
+    //-------------------------------------------------------
+    // Copy-and-paste code for LED debugging
+    // status_led_init(); // If running outside WiFi
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+    sleep_ms(1000);
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+    sleep_ms(1000);
+    //-------------------------------------------------------
 
     for (int i = 1; gpio_get(PIN_INTR); i++) { // Do not go to sleep unless we can ensure there is no further bouncing
         reset_intr_state();
@@ -199,3 +221,25 @@ pass it the async_context already created by your application
     print_dir();
     print_file(name);
     */
+/*
+//-------------------------------------------------------
+// Copy-and-paste code for LED debugging
+// status_led_init(); // If running outside WiFi
+status_led_init_with_context(cyw43_arch_async_context()); // If running within WiFi
+status_led_set_state(true);
+sleep_ms(1000);
+status_led_set_state(false);
+sleep_ms(1000);
+status_led_deinit();
+sleep_ms(1000);
+//-------------------------------------------------------
+
+//-------------------------------------------------------
+// Copy-and-paste code for LED debugging
+// status_led_init(); // If running outside WiFi
+cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+sleep_ms(1000);
+cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+sleep_ms(1000);
+//-------------------------------------------------------
+*/
