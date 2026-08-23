@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <stdio.h>
 #include <dirent.h>
 #include <time.h>
@@ -42,7 +43,7 @@ int main() {
     gpio_set_pulls(PIN_CS, true, false);
     gpio_put(PIN_CS, 1); // Must occur first before setting polarity and phase of SPI
 
-    spi_init(SPI_PORT, 2000000); // 2Mhz baudrate, see doc pg. 13 for info on appropriate ranges
+    spi_init(SPI_PORT, 2000000); // 2Mhz baudrate for 3200 and 1600, else 400k for 800, see doc pg. 13 for info on appropriate ranges
 
     spi_set_format(SPI_PORT, 8, 1, 1, SPI_MSB_FIRST); // sets polarity and phase to 1 as required, see doc pg. 13
     // Since pins on the board have specific SPI functions, you need not specify the role of each pin, it just works
@@ -50,9 +51,9 @@ int main() {
     gpio_set_function(PIN_MISO, GPIO_FUNC_SPI);
     gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
     gpio_set_function(PIN_MOSI, GPIO_FUNC_SPI);
-    /*
+
     bool strike_flag;
-    if (gpio_get(PIN_INTR)) { // Grab data if woken up by interrupt. TODO: Make this more robust
+    if (gpio_get(PIN_INTR) && run_count) { // Grab data if woken up by interrupt and isn't first run to ensure no floating values
         fetch_data(data);
         strike_flag = true;
     } else {           // Not a strike, booting up for first time, run usual set up
@@ -61,6 +62,19 @@ int main() {
         sleep_ms(5000); // Wait 5 seconds to let user open Serial Monitor
 
         strike_flag = false;
+
+        for (int i = 0; (i < CONNECT_RETRY) && (wifi_status() != WIFI_IS_CONNECTED); i++) { // Attempt multiple times to conect to WiFi
+            printf("Wifi connection attempt #%d\n", i);
+            fflush(stdout);
+            connect_to_wifi();
+        }
+
+        set_time();
+
+        printf("Time = %lld\n", get_time());
+        fflush(stdout);
+
+        set_mac(); // Must be called at the start to establish MAC address for future
 
         read_state_on();
         sleep_ms(10); // ADXL343 needs at least ~1.4ms to turn setting on
@@ -72,31 +86,70 @@ int main() {
     initialize_lfs(); // Initializes the filesystem, we do this last to not delay collecting samples
 
     if (strike_flag) { // Write data to file
-        write_binary_file(generate_temp_bin_name(), data);
+        char *name = generate_bin_name();
+        write_binary_file(name, data);
+        free(name);
     }
 
     // Regardless of strike or not, check if there are any unsent strikes and attempt to send them
-    char **files;
-    if (files = find_in_dir(".bin")) {
-        for (int i = 0; (i < CONNECT_RETRY) && !wifi_status; i++) { // Attempt multiple times to conect to WiFi
+    // First show the user what files are currently available
+    print_dir();
+    char *files[MAX_DIR_SIZE];
+    if (find_in_dir(".bin", files) == 0 && files[0] != NULL) {                              // Ensure find_in_dir ran correctly and there are ".bin" files
+        for (int i = 0; (i < CONNECT_RETRY) && (wifi_status() != WIFI_IS_CONNECTED); i++) { // Attempt multiple times to conect to WiFi
             printf("Wifi connection attempt #%d\n", i);
+            fflush(stdout);
             connect_to_wifi();
         }
 
-        if (wifi_status()) {
+        if (wifi_status() == WIFI_IS_CONNECTED) {
             printf("Successfully connected to Wi-Fi!\n");
+            int16_t *buf_data = malloc(STRIKE_SAMPLES * 3 * sizeof(int16_t)); // 3 for each axis, needs to be malloc'ed because too large for stack
 
-            for (int i = 0; files[i] != NULL; i++) {
+            if (buf_data == NULL) {
+                printf("Failed to allocate memory for buf_data, files will be locally stored and sent another time\n");
+
+            } else {
+                TLS_CLIENT_T *state;
+                for (int i = 0; files[i] != NULL; i++) {  // Iterate for each ".bin" file
+                    read_binary_file(files[i], buf_data); // Get the data
+                    state = send_data(files[i], buf_data);
+
+                    if (state->http_state == GITHUB_SUCCESS_CODE) { // If data sent correct delete the file
+                        printf("Successfully sent file:\t%s!\n", files[i]);
+                        remove(files[i]);
+                    }
+                    free(files[i]);
+                }
+            }
+
+            if (buf_data != NULL) { // Free buffer if not already freed
+                free(buf_data);
+            }
+
+        } else {
+            printf("Could not connect to Wi-Fi, files will be locally stored and sent another time\n");
+            for (int i = 0; files[i] != NULL; i++) { // Clean up memory even on failure!
+                free(files[i]);
             }
         }
-
-        disconnect_from_wifi();
+        // Show which are left over
+        printf("Change in files:\n");
+        print_dir();
     }
 
+    printf("Strike count = %d\n", run_count++);
+    printf("Going to deepsleep after disconnecting WiFi and debouncing...\n");
 
-    for (int i = 1; gpio_get(PIN_INTR); i++) { // Do not go to sleep unless we have had at least a whole second without an interrupt
+    // Now it is safe to disconnect from WiFi since we will no longer use any cyw libraries
+    // NOTE: YOU CANNOT RECIEVE FURTHER STDOUT CALLS FROM THE USB AFTER DISCONNECTING!!!!
+    // ANY ATTEMPTS TO CALL PRINTF WILL APPEAR AS IF THEY FAILED!!!
+    // Hence all our last prints will be made before this, even if a little awkward...
+    disconnect_from_wifi();
+
+    for (int i = 1; gpio_get(PIN_INTR); i++) { // Do not go to sleep unless we can ensure there is no further bouncing
         reset_intr_state();
-        sleep_ms( ((i * 1000) < MAX_DEBOUNCE_WAIT_MS) ? (i * 1000) : MAX_DEBOUNCE_WAIT_MS );
+        sleep_ms(((i * 1000) < MAX_DEBOUNCE_WAIT_MS) ? (i * 1000) : MAX_DEBOUNCE_WAIT_MS);
     }
     reset_intr_state(); // One last reset just in-case
     deepsleep();
@@ -105,32 +158,7 @@ int main() {
         printf("End of Code! You should not see this!\n");
         sleep_ms(1000);
     }
-
-    */
-
-    printf(".\n"); // Dummy printf just to give us Serial Monitor access
-    fflush(stdout);
-    sleep_ms(5000); // Wait 5 seconds to let user open Serial Monitor
-
-    connect_to_wifi();
-    set_time();
-    disconnect_from_wifi();
-
-    printf("Time = %lld\n", get_time());
-    fflush(stdout);
 }
-
-/*
-   hard_assert(status_led_init());
-   if (run_count > 0) {
-       for (int i = 0; i < run_count; i++) {
-           status_led_set_state(true);
-           sleep_ms(1000 / run_count);
-           status_led_set_state(false);
-           sleep_ms(100 / run_count);
-       }
-   }
-   */
 
 /*
 Notes on LEDs (specifically status_led_init):
@@ -141,3 +169,33 @@ However an application should only use a single async_context instance to talk t
 already has an async context (e.g. created by cyw43_arch_init) you should use status_led_init_with_context instead and
 pass it the async_context already created by your application
 */
+
+/*
+    //To be placed after gpio setup
+    read_state_on();
+    sleep_ms(10); // ADXL343 needs at least ~1.4ms to turn setting on
+
+    intr_state_on();
+    sleep_ms(10); // ADXL343 needs at least ~1.4ms to turn setting on
+
+    initialize_lfs();
+
+    printf(".\n"); // Dummy printf just to give us Serial Monitor access
+    fflush(stdout);
+    sleep_ms(3000);
+    printf("3\n");
+    sleep_ms(1000);
+    printf("2\n");
+    sleep_ms(1000);
+    printf("1\n");
+    sleep_ms(1000);
+    printf("Go!\n");
+    sleep_ms(250);
+
+    fetch_data(data);
+    char *name = "test.txt";
+    write_binary_file(name, data);
+    sleep_ms(250);
+    print_dir();
+    print_file(name);
+    */

@@ -4,7 +4,10 @@
 
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
+#include "pico/cyw43_driver.h"
 #include "pico/aon_timer.h"
+
+#include "hardware/watchdog.h"
 
 #include "lwip/pbuf.h"
 #include "lwip/altcp_tcp.h"
@@ -15,7 +18,9 @@
 #include "mbedtls/ssl.h"
 
 #include "communication.h"
+#include "storage.h"
 #include "secrets.h" //In the repository this is secrets_example.h, modify it and rename it for your own usage!
+#include "accelerometer.h"
 
 // Note:
 // cyw43_arch_lwip_begin/end should be used around calls into lwIP to ensure correct locking.
@@ -46,23 +51,20 @@
 
 // TODO: make all the error message be sent to stderr perhaps?
 
-typedef struct TLS_CLIENT_T_ {
-    struct altcp_pcb *pcb;
-    bool complete;
-    int error;
-    char *http_request;
-    int timeout;
-} TLS_CLIENT_T;
-
-bool sntp_state = false; // Whether or not a new timestamp has been set
+bool is_wifi_init = false;
+bool sntp_state   = false;                 // Whether or not a new timestamp has been set
+char __persistent_data(mac_addr[MAC_LEN]); // We don't wanna keep needing WiFi to get the MAC address for naming purposes
 
 static struct altcp_tls_config *tls_config = NULL;
 
 int connect_to_wifi(void) {
     int status;
-    if (status = cyw43_arch_init()) { // RP2 function
-        printf("Failure to initialize cyw43_arch with code: %d\n", status);
-        return status;
+    if (!is_wifi_init) {                         // Only initialize if not already active
+        if ((status = cyw43_arch_init()) != 0) { // RP2 function
+            printf("Failure to initialize cyw43_arch with code: %d\n", status);
+            return status;
+        }
+        is_wifi_init = true;
     }
 
     cyw43_arch_enable_sta_mode(); // RP2 function. Enables WiFi in station mode (client), has no error output
@@ -70,29 +72,47 @@ int connect_to_wifi(void) {
 
     printf("Connecting to WiFi...\n");
 
-    if (status = cyw43_arch_wifi_connect_timeout_ms(WIFI_SSID, WIFI_PASS, CYW43_AUTH_WPA2_AES_PSK, TIMEOUT_MS)) { // RP2 function
+    if ((status = cyw43_arch_wifi_connect_timeout_ms(WIFI_SSID, WIFI_PASS, CYW43_AUTH_WPA2_AES_PSK, TIMEOUT_MS)) != 0) { // RP2 function
         printf("Failure to connect to WiFi with code: %d\n", status);
+        cyw43_arch_disable_sta_mode();
         return status;
     }
 
     return 0;
 }
 
-void disconnect_from_wifi(void) {
+void disconnect_from_wifi(void) { // Should not be called unless absolutely sure you won't need any cyw libraries until a reset
     // All are RP2 functions
-    cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA); // Unsure how much this is really needed?
-    cyw43_arch_disable_sta_mode();                 // Apparently some routers may be mad if you don't do this?
-    cyw43_arch_deinit();                           // Might cause some issues with repeated init/deinit, but since we are resetting it's fine?
+    if (is_wifi_init) {
+        cyw43_arch_lwip_begin();
+        cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA);
+        cyw43_arch_disable_sta_mode(); // Apparently some routers may be mad if you don't do this
+        cyw43_arch_lwip_end();
+
+        uint64_t timeout_us = make_timeout_time_ms(250);
+        while (get_absolute_time() < timeout_us) {
+            cyw43_arch_poll();
+            sleep_ms(10); // Yield to prevent tight-loop lockups
+        }
+
+        cyw43_arch_deinit(); // Will cause a hard fault if any cyw libraries are used after being called
+        is_wifi_init = false;
+        printf("Disconnected from WiFi!\n");
+    }
 }
 
-int wifi_status(void) {
-    int status = cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA);
-    if (status != CYW43_LINK_JOIN) { // RP2 function
-        printf("Not connected to WiFi with code: %d\n", status);
-        return status;
+int wifi_status(void) { // Returns 3 if running (CYW43_LINK_UP)
+    if (!is_wifi_init) {
+        return -1;
     }
 
-    return 0;
+    int status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA);
+    if (status != WIFI_IS_CONNECTED) { // RP2 function
+        printf("Not connected to WiFi with code: %d\n", status);
+        sleep_ms(2000); // Give some time before another attempt at connecting
+    }
+
+    return status;
 }
 
 static err_t tls_client_close(void *arg) {
@@ -123,13 +143,28 @@ static err_t tls_client_connected(void *arg, struct altcp_pcb *pcb, err_t err) {
         return tls_client_close(state);
     }
 
-    printf("Sending initial request...\n");
-    err = altcp_write(state->pcb, state->http_request, strlen(state->http_request), TCP_WRITE_FLAG_COPY);
-    if (err != ERR_OK) {
-        printf("error writing data, err=%d", err);
-        return tls_client_close(state);
+    printf("Sending request in chunks...\n");
+    u16_t request_length = strlen(state->http_request);
+    u16_t written        = 0;
+    u16_t chunk_size     = 2000; // Safely below MBEDTLS_SSL_OUT_CONTENT_LEN (2048)
+    u16_t to_write;              // How many bytes will be written each loop
+
+    while (written < request_length) {
+        to_write = request_length - written;
+        if (to_write > chunk_size) { // If too big just set to chunk_size
+            to_write = chunk_size;
+        }
+        printf("Writing %d bytes to HTTPS\n", to_write);
+
+        err = altcp_write(state->pcb, state->http_request + written, to_write, TCP_WRITE_FLAG_COPY); // written adds to a pointer location!
+        if (err != ERR_OK) {
+            printf("Error writing chunk at offset %d, err=%d\n", written, err);
+            return tls_client_close(state);
+        }
+        written += to_write;
     }
 
+    printf("Finished sending all data!\n");
     return ERR_OK;
 }
 
@@ -166,6 +201,18 @@ static err_t tls_client_recv(void *arg, struct altcp_pcb *pcb, struct pbuf *p, e
 
         printf("\nnew data received from server:\n-----\n\n%s\n\n-----\n", buf);
 
+        // Check for Github success code
+        if (strncmp(buf, "HTTP/", 5) == 0) {
+            // Extract the status code ignoring the HTTP/1.x part
+            if (sscanf(buf, "HTTP/1.%*d %d", &state->http_state) == 1) {
+                if (state->http_state == 201) {
+                    printf("Success! GitHub created the file (201 Created).\n");
+                } else {
+                    printf("Warning: GitHub API returned status %d\n", state->http_state);
+                }
+            }
+        }
+
         // Needs to be called after user is done reading the data, must specify how many bytes were read (p->tot_len)
         altcp_recved(pcb, p->tot_len);
     }
@@ -178,7 +225,7 @@ static void tls_client_connect_to_server_ip(const ip_addr_t *ipaddr, TLS_CLIENT_
     err_t err;
     u16_t port = 443; // Port for HTTPS
 
-    printf("Connecting to GitHub...");
+    printf("Connecting to GitHub...\n");
 
     // altcp_connect will return instantly, it does not wait for the connection protocal to finish
     // Instead the callback function supplied as the 4th argument is meant to handle that
@@ -260,26 +307,39 @@ static bool tls_client_open(const char *hostname, void *arg) {
     return err == ERR_OK || err == ERR_INPROGRESS;
 }
 
-int send_data(const char *path, const char *content) {
-    // Currently doesn't spport certificate checking
+// Returns the state variable on success, NULL otherwise, must be freed!!!
+// Currently doesn't spport certificate checking
+TLS_CLIENT_T *send_data(const char *path, const int16_t *content) {
 
     tls_config = altcp_tls_create_config_client(GITHUB_CERT, GITHUB_CERT_LEN); // lwIP function, creates handle
     assert(tls_config);
 
     TLS_CLIENT_T *state = calloc(1, sizeof(TLS_CLIENT_T)); // calloc initializes the memory to 0
 
+    // We need to turn content into a Base64 encoded string first
+    // For each set of samples the 3 axes get turned into 8 characters + null terminator
+    char *content_B64 = malloc(8 * STRIKE_SAMPLES + 1);
+    if (!content_B64) {
+        fprintf(stderr, "Failure to allocate memory for Base64\n");
+        free(state);
+        altcp_tls_free_config(tls_config);
+        return NULL;
+    }
+    encode_data_to_base64(content, content_B64);
+
     // snprintf is an insane optimization here, it prints 0 characters to no buffer
     // butttt, it returns how many characters would've been written had it been able to write them all.
     // That plus 1 for the string terminator gets you the length without needing to worry about memory
-    int body_len = snprintf(NULL, 0, JSON_BODY_FORMAT, content);
-    char *body   = malloc(body_len + 1);
+    int body_len = snprintf(NULL, 0, JSON_BODY_FORMAT, content_B64);
+    char *body   = malloc(body_len + 1); //+1 for terminator
     if (!body) {
         fprintf(stderr, "Failure to allocate memory for JSON Body");
         free(state);
         altcp_tls_free_config(tls_config);
-        return -1;
+        return NULL;
     }
-    snprintf(body, body_len + 1, JSON_BODY_FORMAT, content); // Now write the body to the buffer
+    snprintf(body, body_len + 1, JSON_BODY_FORMAT, content_B64); // Now write the body to the buffer
+    free(content_B64);
 
     // 2. Format complete HTTP request with Content-Length header
     int req_len         = snprintf(NULL, 0, HTTP_REQUEST_FORMAT, path, body_len, body) + 1; // Now get length of full request
@@ -289,7 +349,7 @@ int send_data(const char *path, const char *content) {
         free(body);
         free(state);
         altcp_tls_free_config(tls_config);
-        return -1;
+        return NULL;
     }
     snprintf(state->http_request, req_len, HTTP_REQUEST_FORMAT, path, body_len, body);
     free(body); // Done with temporary body buffer
@@ -299,19 +359,27 @@ int send_data(const char *path, const char *content) {
         free(state->http_request);
         free(state);
         altcp_tls_free_config(tls_config);
-        return -1; // TODO: Replace with corresponding SDK Error enum
+        return NULL; // TODO: Replace with corresponding SDK Error enum
     }
-    while (!state->complete) {
+
+    int max_time_ms     = 1000 * 30;                         // Give lwIP 30 seconds to sort itself out
+    uint64_t timeout_us = make_timeout_time_ms(max_time_ms); // Get the future time
+    while (!state->complete && (get_absolute_time() < timeout_us)) {
+        printf("Waiting on HTTPS...\n");
         cyw43_arch_poll();                                          // Required in polling mode, keeps process churning
-        cyw43_arch_wait_for_work_until(make_timeout_time_ms(1000)); // Waits until 1000ms from current timestamp
+        cyw43_arch_wait_for_work_until(make_timeout_time_ms(1000)); // Skips 1s wait if there's work to do
+        fflush(stdout);
     }
-    int err = state->error;
+
+    if (!state->complete) {
+        printf("Error: HTTPS request timed out in polling loop.\n");
+    }
 
     // Cleanup and end request
     free(state->http_request);
-    free(state);
+    // free(state); Add this if you change your mind
     altcp_tls_free_config(tls_config);
-    return err;
+    return state;
 }
 
 // callback for lwIP/SNTP to set the aon_timer to UTC
@@ -337,17 +405,71 @@ void set_time(void) {                        // Function user calls to setup the
     sntp_setoperatingmode(SNTP_OPMODE_POLL); // Needs to be called before sntp_init()
     sntp_init();
 
-    while (!sntp_state) {
+    int max_time_ms     = 1000 * 60 * 5;                     // Give SNTP 5 minutes to sort itself out
+    uint64_t timeout_us = make_timeout_time_ms(max_time_ms); // Get the future time
+    while (!sntp_state && (get_absolute_time() < timeout_us)) {
+        printf("Waiting on SNTP...\n");
         cyw43_arch_poll();                                          // Required in polling mode, keeps process churning
-        cyw43_arch_wait_for_work_until(make_timeout_time_ms(1000)); // Waits until 1000ms from current timestamp
+        cyw43_arch_wait_for_work_until(make_timeout_time_ms(1000)); // Skips 1s wait if there's work to do
+        fflush(stdout);
     }
 
     sntp_stop();
+
+    // If all fails and we still cannot get the system time, we cannot set it to default to some number
+    // Instead set a timer to wake up and reset from in 5 minutes
+    if (!aon_timer_is_running()) {
+        printf("set_time: Failed completely to get SNTP on boot, restarting and trying again in 5 minutes...\n");
+        fflush(stdout);
+        sleep_ms(1000 * 60 * 6);
+
+        // Reset:
+        watchdog_enable(1, 1);
+        while (1);
+    }
 }
 
-uint64_t get_time(void) { // Function user calls to get back
+uint64_t get_time(void) {          // Function user calls to recieve current time
+    if (!aon_timer_is_running()) { // Ensures we aren't getting a nonsense timestamp
+        if (wifi_status() != WIFI_IS_CONNECTED) {
+            for (int i = 0; (i < CONNECT_RETRY) && (wifi_status() != WIFI_IS_CONNECTED); i++) { // Attempt multiple times to conect to WiFi
+                printf("Wifi connection attempt #%d\n", i);
+                fflush(stdout);
+                connect_to_wifi();
+            }
+        }
+
+        if (wifi_status() == WIFI_IS_CONNECTED) {
+            set_time();
+        }
+    }
+
+    // If all fails and we still cannot get the system time, we cannot set it to default to some number
+    // Instead set a timer to wake up and reset from in 5 minutes
+    if (!aon_timer_is_running()) {
+        printf("get_time: Failed completely to get SNTP on boot, restarting and trying again in 5 minutes...\n");
+        fflush(stdout);
+        sleep_ms(1000 * 60 * 6);
+
+        // Reset:
+        watchdog_enable(1, 1);
+        while (1);
+    }
+
     struct timespec current_time;
 
     aon_timer_get_time(&current_time);
     return current_time.tv_sec;
+}
+
+void set_mac(void) {    // To be called to store MAC while WiFi is up, can't use cyw function otherwise
+    uint8_t raw_mac[6]; // Below function only returns 6 bytes of MAC data and needs to be formatted
+    cyw43_wifi_get_mac(&cyw43_state, CYW43_ITF_STA, raw_mac);
+    snprintf(mac_addr, MAC_LEN, "%02X-%02X-%02X-%02X-%02X-%02X", raw_mac[0], raw_mac[1], raw_mac[2], raw_mac[3], raw_mac[4], raw_mac[5]);
+}
+
+void get_mac(char *mac_buff) {
+    if (mac_buff) {
+        strcpy(mac_buff, mac_addr);
+    }
 }

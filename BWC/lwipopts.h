@@ -9,10 +9,9 @@
 #define MEM_LIBC_MALLOC 0 // MEM_LIBC_MALLOC is incompatible with non polling versions
 
 #define MEM_ALIGNMENT 4
-#ifndef MEM_SIZE
-#define MEM_SIZE 4000
-#endif
-#define MEMP_NUM_TCP_SEG           32
+#define MEM_SIZE      32000 // When MEM_LIB_MALLOC is 0 lwIP uses a single static array for operations, this is that array size
+
+#define MEMP_NUM_TCP_SEG           32 * 2 // Increase by 2 to hold our massive HTTTPS request
 #define MEMP_NUM_ARP_QUEUE         10
 #define PBUF_POOL_SIZE             24
 #define LWIP_ARP                   1
@@ -21,7 +20,7 @@
 #define LWIP_RAW                   1
 #define TCP_WND                    (8 * TCP_MSS)
 #define TCP_MSS                    1460
-#define TCP_SND_BUF                (8 * TCP_MSS)
+#define TCP_SND_BUF                (8 * TCP_MSS) * 2 // Increase by 2 to hold our massive HTTTPS request
 #define TCP_SND_QUEUELEN           ((4 * (TCP_SND_BUF) + (TCP_MSS - 1)) / (TCP_MSS))
 #define LWIP_NETIF_STATUS_CALLBACK 1
 #define LWIP_NETIF_LINK_CALLBACK   1
