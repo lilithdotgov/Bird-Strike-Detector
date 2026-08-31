@@ -20,7 +20,7 @@
 #define LWIP_RAW                   1
 #define TCP_WND                    (8 * TCP_MSS)
 #define TCP_MSS                    1460
-#define TCP_SND_BUF                (8 * TCP_MSS) * 2 // Increase by 2 to hold our massive HTTTPS request
+#define TCP_SND_BUF                (8 * TCP_MSS) * 2 // Increase by 2 to hold our massive HTTTPS request. Might be redundant now that we are sending via chunks. TODO: Revisit this later
 #define TCP_SND_QUEUELEN           ((4 * (TCP_SND_BUF) + (TCP_MSS - 1)) / (TCP_MSS))
 #define LWIP_NETIF_STATUS_CALLBACK 1
 #define LWIP_NETIF_LINK_CALLBACK   1
@@ -50,7 +50,7 @@
 
 #define ETHARP_DEBUG     LWIP_DBG_OFF
 #define NETIF_DEBUG      LWIP_DBG_OFF
-#define PBUF_DEBUG       LWIP_DBG_OFF
+#define PBUF_DEBUG       LWIP_DBG_ON
 #define API_LIB_DEBUG    LWIP_DBG_OFF
 #define API_MSG_DEBUG    LWIP_DBG_OFF
 #define SOCKETS_DEBUG    LWIP_DBG_OFF
@@ -59,10 +59,10 @@
 #define IP_DEBUG         LWIP_DBG_OFF
 #define IP_REASS_DEBUG   LWIP_DBG_OFF
 #define RAW_DEBUG        LWIP_DBG_OFF
-#define MEM_DEBUG        LWIP_DBG_OFF
+#define MEM_DEBUG        LWIP_DBG_ON
 #define MEMP_DEBUG       LWIP_DBG_OFF
 #define SYS_DEBUG        LWIP_DBG_OFF
-#define TCP_DEBUG        LWIP_DBG_OFF
+#define TCP_DEBUG        LWIP_DBG_ON
 #define TCP_INPUT_DEBUG  LWIP_DBG_OFF
 #define TCP_OUTPUT_DEBUG LWIP_DBG_OFF
 #define TCP_RTO_DEBUG    LWIP_DBG_OFF

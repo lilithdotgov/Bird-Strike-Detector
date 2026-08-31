@@ -7,8 +7,6 @@
 #include "pico/cyw43_driver.h"
 #include "pico/aon_timer.h"
 
-#include "hardware/watchdog.h"
-
 #include "lwip/pbuf.h"
 #include "lwip/altcp_tcp.h"
 #include "lwip/altcp_tls.h"
@@ -65,7 +63,7 @@ void disconnect_from_wifi(void) { // Should not be called unless absolutely sure
         // cyw43_arch_disable_sta_mode(); // Apparently some routers may be mad if you don't do this
         cyw43_arch_lwip_end();
 
-        uint64_t timeout_us = make_timeout_time_ms(250);
+        uint64_t timeout_us = make_timeout_time_ms(1000);
         while (get_absolute_time() < timeout_us) {
             cyw43_arch_poll();
             sleep_ms(10); // Yield to prevent tight-loop lockups
@@ -171,7 +169,7 @@ static err_t tls_client_poll(void *arg, struct altcp_pcb *pcb) { // lwIP has tim
     TLS_CLIENT_T *state = (TLS_CLIENT_T *)arg;
     printf("timed out\n");
     state->error = PICO_ERROR_TIMEOUT;
-    return tls_client_close(arg);
+    return tls_client_close(state);
 }
 
 static void tls_client_err(void *arg, err_t err) { // Doesn't need to free PCB as it's handled automatically by altcp_err()
@@ -236,12 +234,14 @@ static void tls_client_connect_to_server_ip(const ip_addr_t *ipaddr, TLS_CLIENT_
 }
 
 static void tls_client_dns_found(const char *hostname, const ip_addr_t *ipaddr, void *arg) {
+    TLS_CLIENT_T *state = (TLS_CLIENT_T *)arg;
+
     if (ipaddr) {
         printf("DNS resolving complete\n");
-        tls_client_connect_to_server_ip(ipaddr, (TLS_CLIENT_T *)arg);
+        tls_client_connect_to_server_ip(ipaddr, state);
     } else {
         printf("error resolving hostname %s\n", hostname);
-        tls_client_close(arg);
+        tls_client_close(state);
     }
 }
 
@@ -298,7 +298,7 @@ static bool tls_client_open(const char *hostname, void *arg) {
         tls_client_connect_to_server_ip(&server_ip, state);
     } else if (err != ERR_INPROGRESS) {
         printf("error initiating DNS resolving, err=%d\n", err);
-        tls_client_close(state->pcb);
+        tls_client_close(state);
     }
 
     cyw43_arch_lwip_end();
@@ -372,11 +372,11 @@ TLS_CLIENT_T *send_data(const char *path, const int16_t *content) {
         printf("Waiting on HTTPS...\n");
         cyw43_arch_poll();                                          // Required in polling mode, keeps process churning
         cyw43_arch_wait_for_work_until(make_timeout_time_ms(1000)); // Skips 1s wait if there's work to do
-        fflush(stdout);
     }
 
     if (!state->complete) {
         printf("Error: HTTPS request timed out in polling loop.\n");
+        tls_client_close(state); // Free the PCB
     }
 
     // Cleanup and end request
@@ -415,7 +415,6 @@ void set_time(void) { // Function user calls to setup the AON time via SNTP
             printf("Waiting on SNTP...\n");
             cyw43_arch_poll();                                          // Required in polling mode, keeps process churning
             cyw43_arch_wait_for_work_until(make_timeout_time_ms(1000)); // Skips 1s wait if there's work to do
-            fflush(stdout);
         }
 
         sntp_stop();
@@ -427,10 +426,8 @@ void set_time(void) { // Function user calls to setup the AON time via SNTP
     // Instead reset the device
     if (!aon_timer_is_running()) {
         printf("set_time: Failed completely to get SNTP on boot, restarting and trying again after reset...\n");
-        fflush(stdout);
 
-        // Reset:
-        watchdog_enable(1, 1);
+        // Wait for watchdog reset:
         while (1);
     }
 }
@@ -440,7 +437,6 @@ uint64_t get_time(void) {          // Function user calls to recieve current tim
         if (wifi_status() != WIFI_IS_CONNECTED) {
             for (int i = 0; (i < CONNECT_RETRY) && (wifi_status() != WIFI_IS_CONNECTED); i++) { // Attempt multiple times to conect to WiFi
                 printf("Wifi connection attempt #%d\n", i);
-                fflush(stdout);
                 connect_to_wifi();
             }
         }
@@ -451,14 +447,11 @@ uint64_t get_time(void) {          // Function user calls to recieve current tim
     }
 
     // If all fails and we still cannot get the system time, we cannot set it to default to some number
-    // Instead set a timer to wake up and reset from in 5 minutes
+    // Instead reset the device
     if (!aon_timer_is_running()) {
         printf("get_time: Failed completely to get SNTP on boot, restarting and trying again in 5 minutes...\n");
-        fflush(stdout);
-        sleep_ms(1000 * 60 * 6);
 
-        // Reset:
-        watchdog_enable(1, 1);
+        // Wait for the watchdog reset:
         while (1);
     }
 

@@ -10,3 +10,4 @@ build
 .vscode
 .clang-format
 BWC/secrets.h
+BWC/debug.txt

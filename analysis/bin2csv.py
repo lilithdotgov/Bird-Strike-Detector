@@ -19,21 +19,13 @@ def BinConvert(path=path):
         f = open(files[i],'rb')
         content = f.read()
         
-        ScaleX = struct.unpack('f',content[0:4])[0]
-        ScaleY = struct.unpack('f',content[4:8])[0]
-        ScaleZ = struct.unpack('f',content[8:12])[0]
-        
-        OffsetX = struct.unpack('f',content[12:16])[0]
-        OffsetY = struct.unpack('f',content[16:20])[0]
-        OffsetZ = struct.unpack('f',content[20:24])[0]
-        
         fcsv = open(f'{files[i][:-4]}'+".csv",'w',newline='')
         fwriter = csv.writer(fcsv)
         
-        for i2 in range(24,(len(content)-24),6):
-            fwriter.writerow([ScaleX * (struct.unpack('h',content[i2+0:i2+2])[0] - OffsetX),
-                              ScaleY * (struct.unpack('h',content[i2+2:i2+4])[0] - OffsetY),
-                              ScaleZ * (struct.unpack('h',content[i2+4:i2+6])[0] - OffsetZ)])
+        for i2 in range(0,(len(content)),6):
+            fwriter.writerow([9.80665 * struct.unpack('>h',content[i2+0:i2+2])[0] / 256,
+                              9.80665 * struct.unpack('>h',content[i2+2:i2+4])[0] / 256,
+                              9.80665 * struct.unpack('>h',content[i2+4:i2+6])[0] / 256])
             
         f.close()
         os.remove(files[i])

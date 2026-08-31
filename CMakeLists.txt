@@ -61,7 +61,7 @@ target_link_libraries(BWC
         hardware_pio
         hardware_powman
         hardware_watchdog
-        pico_cyw43_arch # only needed for LED
+        #pico_cyw43_arch # only needed for LED, must #include pico/cyw43_arch
         pico_cyw43_arch_lwip_poll
         pico_cyw43_driver
         pico_lwip
@@ -69,8 +69,6 @@ target_link_libraries(BWC
         pico_lwip_mbedtls
         pico_lwip_sntp
         pico_low_power
-        pico_status_led
-        pico_rand
         pico_aon_timer
         )
 

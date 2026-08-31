@@ -7,14 +7,15 @@
 #include "pico/low_power.h"
 #include "hardware/spi.h"
 #include "hardware/powman.h"
-#include "pico/status_led.h"
-#include "pico/cyw43_arch.h" //only needed for LED
+#include "hardware/watchdog.h"
+// #include "pico/cyw43_arch.h" //only needed for LED must add pico_cyw43_arch to CMake
 
 #include "accelerometer.h"
 #include "storage.h"
 #include "communication.h"
 
 #define MAX_DEBOUNCE_WAIT_MS 60000
+#define WATCHDOG_TIMER_MS    15000
 
 uint8_t __persistent_data(data)[STRIKE_SAMPLES * BPS]; // Where strike data is to be stored in ram
 
@@ -58,17 +59,20 @@ int main() {
     if (gpio_get(PIN_INTR) && run_count) { // Grab data if woken up by interrupt and isn't first run to ensure no floating values
         fetch_data(data);
         strike_flag = true;
-    } else {
+    } else {           // TODO: When done with debugging add check for run_count and watchdog, only want this to occur first boot
         printf(".\n"); // Dummy printf just to give us Serial Monitor access
         fflush(stdout);
         sleep_ms(5000); // Wait 5 seconds to let user open Serial Monitor
         strike_flag = false;
     }
 
+    // Set up watchdog
+    watchdog_enable(WATCHDOG_TIMER_MS, 1);
+
     // If no USB host is connected (e.g., on battery power), disable USB stdout completely.
     // This makes all printf/fflush(stdout) statements into no-ops (supposedly, check docs later...)
     if (!stdio_usb_connected()) {
-        // stdio_set_driver_enabled(&stdio_usb, false);
+        stdio_set_driver_enabled(&stdio_usb, false);
     }
 
     if (strike_flag == false) { // Not a strike, booting up for first time, run usual set up
@@ -76,15 +80,14 @@ int main() {
         strike_flag = false;
 
         for (int i = 0; (i < CONNECT_RETRY) && (wifi_status() != WIFI_IS_CONNECTED); i++) { // Attempt multiple times to connect to WiFi
+            watchdog_update();                                                              // Feed the watchdog
             printf("Wifi connection attempt #%d\n", i);
-            fflush(stdout);
             connect_to_wifi();
         }
-
+        watchdog_update(); // Feed the watchdog
         set_time();
 
         printf("Time = %lld\n", get_time());
-        fflush(stdout);
 
         set_mac(); // Must be called at the start to establish MAC address for future
 
@@ -107,13 +110,12 @@ int main() {
     // First show the user what files are currently available
     print_dir();
     char *files[MAX_DIR_SIZE];
-    if (find_in_dir(".bin", files) == 0 && files[0] != NULL) {                              // Ensure find_in_dir ran correctly and there are ".bin" files
+    if (find_in_dir(".bin", files) == 0 && files[0] != NULL && run_count) {                 // Ensure find_in_dir ran correctly and there are ".bin" files and this isn't first boot
         for (int i = 0; (i < CONNECT_RETRY) && (wifi_status() != WIFI_IS_CONNECTED); i++) { // Attempt multiple times to conect to WiFi
+            watchdog_update();                                                              // Feed the watchdog
             printf("Wifi connection attempt #%d\n", i);
-            fflush(stdout);
             connect_to_wifi();
         }
-
         if (wifi_status() == WIFI_IS_CONNECTED) {
             printf("Successfully connected to Wi-Fi!\n");
             int16_t *buf_data = malloc(STRIKE_SAMPLES * 3 * sizeof(int16_t)); // 3 for each axis, needs to be malloc'ed because too large for stack
@@ -124,14 +126,16 @@ int main() {
             } else {
                 TLS_CLIENT_T *state;
                 for (int i = 0; files[i] != NULL; i++) {  // Iterate for each ".bin" file
+                    watchdog_update();                    // Feed the watchdog
                     read_binary_file(files[i], buf_data); // Get the data
                     state = send_data(files[i], buf_data);
-
-                    if (state->http_state == GITHUB_SUCCESS_CODE) { // If data sent correct delete the file
-                        printf("Successfully sent file:\t%s!\n", files[i]);
-                        remove(files[i]);
+                    if (state != NULL) {                                // Ensure we don't dereference a NULL pointer!!!
+                        if (state->http_state == GITHUB_SUCCESS_CODE) { // If data sent correct delete the file
+                            printf("Successfully sent file:\t%s!\n", files[i]);
+                            remove(files[i]);
+                        }
+                        free(state);
                     }
-                    free(state);
                     free(files[i]);
                 }
             }
@@ -155,19 +159,11 @@ int main() {
     printf("Going to deepsleep after disconnecting WiFi and debouncing...\n");
 
     // Now it is safe to disconnect from WiFi since we will no longer use any cyw libraries
-    // NOTE: YOU CANNOT RECIEVE FURTHER STDOUT CALLS FROM THE USB AFTER DISCONNECTING!!!!
-    // ANY ATTEMPTS TO CALL PRINTF WILL APPEAR AS IF THEY FAILED!!!
-    // Hence all our last prints will be made before this, even if a little awkward...
+    // NOTE: Disconnecting sometimes causes printf to not work, so don't expect anything past this point
+    // Furthermore, attempting to change the LEDs seem to lead to a catastrophic failure when on batteries
     disconnect_from_wifi();
 
-    //-------------------------------------------------------
-    // Copy-and-paste code for LED debugging
-    // status_led_init(); // If running outside WiFi
-    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-    sleep_ms(1000);
-    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
-    sleep_ms(1000);
-    //-------------------------------------------------------
+    watchdog_disable(); // End watchdog now that we have overcome the difficult parts
 
     for (int i = 1; gpio_get(PIN_INTR); i++) { // Do not go to sleep unless we can ensure there is no further bouncing
         reset_intr_state();
@@ -193,53 +189,12 @@ pass it the async_context already created by your application
 */
 
 /*
-    //To be placed after gpio setup
-    read_state_on();
-    sleep_ms(10); // ADXL343 needs at least ~1.4ms to turn setting on
-
-    intr_state_on();
-    sleep_ms(10); // ADXL343 needs at least ~1.4ms to turn setting on
-
-    initialize_lfs();
-
-    printf(".\n"); // Dummy printf just to give us Serial Monitor access
-    fflush(stdout);
-    sleep_ms(3000);
-    printf("3\n");
+    //-------------------------------------------------------
+    // Copy-and-paste code for LED debugging
+    // status_led_init(); // If running outside WiFi
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
     sleep_ms(1000);
-    printf("2\n");
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
     sleep_ms(1000);
-    printf("1\n");
-    sleep_ms(1000);
-    printf("Go!\n");
-    sleep_ms(250);
-
-    fetch_data(data);
-    char *name = "test.txt";
-    write_binary_file(name, data);
-    sleep_ms(250);
-    print_dir();
-    print_file(name);
-    */
-/*
-//-------------------------------------------------------
-// Copy-and-paste code for LED debugging
-// status_led_init(); // If running outside WiFi
-status_led_init_with_context(cyw43_arch_async_context()); // If running within WiFi
-status_led_set_state(true);
-sleep_ms(1000);
-status_led_set_state(false);
-sleep_ms(1000);
-status_led_deinit();
-sleep_ms(1000);
-//-------------------------------------------------------
-
-//-------------------------------------------------------
-// Copy-and-paste code for LED debugging
-// status_led_init(); // If running outside WiFi
-cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-sleep_ms(1000);
-cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
-sleep_ms(1000);
-//-------------------------------------------------------
+    //-------------------------------------------------------
 */

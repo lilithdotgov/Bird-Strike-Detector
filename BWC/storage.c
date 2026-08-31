@@ -2,7 +2,6 @@
 #include <dirent.h>
 
 #include "pico/stdlib.h"
-#include "pico/rand.h"
 
 #include "pfs.h"
 #include "lfs.h"
@@ -27,7 +26,6 @@ void initialize_lfs(void) {
     pfs = pfs_ffs_create(&cfg);
     if (pfs_mount(pfs, "/") != 0) { // If cannot mount lfs, we must format it
         printf("Mount failed. Formatting LittleFS...\n");
-        fflush(stdout);
 
         lfs_t lfs;
         if (lfs_format(&lfs, &cfg) == 0) {
@@ -87,7 +85,6 @@ void print_file(char *name) { // Not meant for binary file
     } else {
         printf("Error: failed to open file");
     }
-    fflush(stdout);
     fclose(fp);
 }
 
@@ -108,7 +105,6 @@ void print_binary_file(char *name) { // For debugging
     } else {
         printf("Error: failed to open file");
     }
-    fflush(stdout);
     fclose(fp);
 }
 
@@ -131,12 +127,10 @@ void print_dir(void) {
         struct dirent *ep;
         while ((ep = readdir(dp)) != NULL) {
             printf("  %s    Type = %d\n", ep->d_name, ep->d_type);
-            fflush(stdout);
         }
         closedir(dp);
     }
     printf("End of file search!\n--------------------\n\n");
-    fflush(stdout);
 }
 
 // Can be used to list every file in the directory by passing an empty string
@@ -171,7 +165,7 @@ char *generate_bin_name(void) { // Returns a string of the filename, all equal l
     int name_len        = (1 + sizeof(MICRO_NUM) + 1 + 17 + 1 + 10 + 4 + 1); // "/" + sizeof(Device ID) + "_" + 17 MAC symbols + "_" + 10 NTP digits + ".bin" + terminator
     char *name          = (char *)malloc(sizeof(char) * name_len);
 
-    snprintf(name, name_len, "/%s_%s_%llu.bin", MICRO_NUM, mac_buff, sntp_time); // Create name with random number
+    snprintf(name, name_len, "/%s_%s_%llu.bin", MICRO_NUM, mac_buff, sntp_time);
     return name;
 }
 
@@ -199,10 +193,10 @@ void encode_data_to_base64(const int16_t *data, char *data_B64) {
         //++ as a post-increment is run after using the value of the varibale
         data_B64[n++] = encoding_table[ ( data[i]   & 0b1111110000000000 ) >> 10 ];
         data_B64[n++] = encoding_table[ ( data[i]   & 0b0000001111110000 ) >> 4  ];
-        data_B64[n++] = encoding_table[ ( data[i]   & 0b0000000000001111 ) >> 0  | ( data[i+1] & 0b1100000000000000 ) >> 14 ];
+        data_B64[n++] = encoding_table[ ( data[i]   & 0b0000000000001111 ) << 2  | ( data[i+1] & 0b1100000000000000 ) >> 14 ];
         data_B64[n++] = encoding_table[ ( data[i+1] & 0b0011111100000000 ) >> 8  ];
         data_B64[n++] = encoding_table[ ( data[i+1] & 0b0000000011111100 ) >> 2  ];
-        data_B64[n++] = encoding_table[ ( data[i+1] & 0b0000000000000011 ) >> 0  | ( data[i+2] & 0b1111000000000000 ) >> 12 ];
+        data_B64[n++] = encoding_table[ ( data[i+1] & 0b0000000000000011 ) << 4  | ( data[i+2] & 0b1111000000000000 ) >> 12 ];
         data_B64[n++] = encoding_table[ ( data[i+2] & 0b0000111111000000 ) >> 6  ];
         data_B64[n++] = encoding_table[ ( data[i+2] & 0b0000000000111111 ) >> 0  ];
     }
