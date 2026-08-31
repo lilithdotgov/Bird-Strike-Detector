@@ -5,3 +5,9 @@ circuitpython
 log.txt
 Flashing
 Obsolete Code
+Testing
+build
+.vscode
+.clang-format
+BWC/secrets.h
+BWC/debug.txt
