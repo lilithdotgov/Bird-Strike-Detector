@@ -25,7 +25,7 @@
 // You can omit them if you are in a callback from lwIP. Note that when using pico_cyw_arch_poll
 // these calls are a no-op and can be omitted, but it is a good practice to use them regardless
 
-#define TIMEOUT_MS  15000            // Default timeout of 15 seconds
+#define TIMEOUT_MS  10000            // Default timeout, cannot be greater than WATCHDOG_TIMER_MS
 #define GITHUB_ADDR "api.github.com" // For DNS lookup and full request
 
 #ifndef GITHUB_CERT
