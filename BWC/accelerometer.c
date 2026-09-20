@@ -24,7 +24,7 @@ SCK also needs to idle at high, see doc pg. 13
 #define REG_INT_ENABLE  0x2E       // Interrupt Enable Register
 #define INT_ENABLE      0x10       // Enables Activity mode
 #define REG_ACT_CTL     0x27       // Enables which axis to be monitored for the interrupt modes. Plus an unused bonus feature, see doc pg. 23
-#define ACT_CTL         0b00010000 // Selects which axis to turn on for the interrupt. See doc pg. 23
+#define ACT_CTL         0b00010000 // Selects which axis to turn on for the interrupt. 0b00010000 for Z, 0b00100000 for Y See doc pg. 23
 #define REG_INT_MAP     0x2F       // Chooses which pin(s) to use for interrupts
 #define INT_MAP         0xEF       // Sets activity mode interrupt to pin INT1
 #define REG_THRESH_ACT  0x24       // Sets threshold for interrupt to occur. Single unsigned byte. threshold = 62.5mg * THRESH_ACT.

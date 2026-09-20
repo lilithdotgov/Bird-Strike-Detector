@@ -25,6 +25,7 @@
 // You can omit them if you are in a callback from lwIP. Note that when using pico_cyw_arch_poll
 // these calls are a no-op and can be omitted, but it is a good practice to use them regardless
 
+#define WLAN_PIN    23               // Pin to enable or disable WLAN chip entirely
 #define TIMEOUT_MS  10000            // Default timeout, cannot be greater than WATCHDOG_TIMER_MS
 #define GITHUB_ADDR "api.github.com" // For DNS lookup and full request
 
@@ -60,23 +61,41 @@ void disconnect_from_wifi(void) { // Should not be called unless absolutely sure
     if (is_wifi_init) {
         cyw43_arch_lwip_begin();
         cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA);
-        // cyw43_arch_disable_sta_mode(); // Apparently some routers may be mad if you don't do this
         cyw43_arch_lwip_end();
 
+        // cyw43_arch_disable_sta_mode(); // Apparently some routers may be mad if you don't do this
+
+        // Let it poll for a bit to ensure all connections are disabled
         uint64_t timeout_us = make_timeout_time_ms(1000);
         while (get_absolute_time() < timeout_us) {
             cyw43_arch_poll();
             sleep_ms(10); // Yield to prevent tight-loop lockups
         }
 
-        // cyw43_arch_deinit(); // Will cause a hard fault if any cyw libraries are used after being called
-        // is_wifi_init = false;
+        gpio_put(WLAN_PIN, 0); // This kills power to the WLAN chip without causing the headache that cyw43_arch_deinit() induces
+
+        const uint cyw_bus_pins[] = { 24, 25, 29 }; // CYW43 SPI DIO/CS/CLK pins
+        for (int i = 0; i < 3; i++) {
+            gpio_init(cyw_bus_pins[i]);
+            gpio_set_dir(cyw_bus_pins[i], GPIO_OUT);
+            gpio_put(cyw_bus_pins[i], 0);
+            gpio_set_input_enabled(cyw_bus_pins[i], false);
+        }
+
+        // cyw43_arch_deinit();  // Will cause a hard fault if any cyw libraries are used after being called
+        is_wifi_init = false; // Therefore, it is of upmost importance to use this flag to determine if any libraries should be run
     }
 }
 
 int connect_to_wifi(void) {
     int status;
-    if (!is_wifi_init) {                         // Only initialize if not already active
+    if (!is_wifi_init) { // Only initialize if not already active
+        gpio_init(WLAN_PIN);
+        gpio_set_dir(WLAN_PIN, GPIO_OUT);
+        if (gpio_get(WLAN_PIN) == 0) {
+            gpio_put(23, 1);
+        }
+
         if ((status = cyw43_arch_init()) != 0) { // RP2 function
             printf("Failure to initialize cyw43_arch with code: %d\n", status);
             return status;
@@ -86,12 +105,9 @@ int connect_to_wifi(void) {
 
         is_wifi_init = true;
     }
-    disconnect_from_wifi(); // Kill any current connections to ensure stability
-    printf("Connecting to WiFi...\n");
 
     if ((status = cyw43_arch_wifi_connect_timeout_ms(WIFI_SSID, WIFI_PASS, CYW43_AUTH_WPA2_AES_PSK, TIMEOUT_MS)) != 0) { // RP2 function
         printf("Failure to connect to WiFi with code: %d\n", status);
-        disconnect_from_wifi();
         return status;
     }
 

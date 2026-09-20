@@ -75,6 +75,10 @@ int main() {
         stdio_set_driver_enabled(&stdio_usb, false);
     }
 
+    if (watchdog_caused_reboot()) {
+        printf("Reboot caused by Watchdog Timer!\n");
+    }
+
     if (strike_flag == false) { // Not a strike, booting up for first time, run usual set up
 
         strike_flag = false;
